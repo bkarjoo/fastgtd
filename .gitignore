@@ -46,6 +46,7 @@ env/
 # Envs
 .env
 .env.*
+!.env.sample
 
 # Logs
 *.log

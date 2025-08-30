@@ -29,10 +29,12 @@ This is a GTD (Getting Things Done) application built with FastAPI and React.
    pip install -r requirements.txt
    ```
 
-4. **Set up database**
-   - Ensure PostgreSQL is running
-   - Create a database for the application
-   - Update database connection settings in your environment
+4. **Set up environment variables**
+   - Copy the sample environment file: `cp .env.sample .env`
+   - Edit `.env` and update the values for your environment:
+     - Set your PostgreSQL connection string in `DATABASE_URL`
+     - Change `JWT_SECRET` to a secure random string for production
+   - Ensure PostgreSQL is running and create a database for the application
 
 5. **Run database migrations**
    ```bash
