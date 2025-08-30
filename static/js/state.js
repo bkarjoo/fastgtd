@@ -84,3 +84,20 @@ export function clearState() {
     currentRoot = null;
     setAuthToken(null);
 }
+
+// Utility function to safely construct URLs with parent_id parameter
+export function buildNodeURL(baseUrl, parentId) {
+    // Only include parent_id if it's a valid UUID
+    if (!parentId || parentId === 'null' || parentId === '' || parentId === null || parentId === undefined) {
+        return baseUrl;
+    }
+    
+    // Basic UUID validation (36 characters with hyphens at positions 8, 13, 18, 23)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(parentId)) {
+        console.warn(`Invalid parent_id provided: ${parentId}. Omitting from URL.`);
+        return baseUrl;
+    }
+    
+    return `${baseUrl}?parent_id=${parentId}`;
+}

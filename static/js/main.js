@@ -1,6 +1,9 @@
 // Entry point for the mobile app
 // Phase 2: Central hub for module imports and global function bindings
 
+// Import URL safety module first (patches fetch globally)
+import './url-safety.js?v=1735576231';
+
 // Import extracted modules
 import { login, logout } from './auth.js?v=1735576231';
 import { toggleDarkMode, backToMain } from './ui.js?v=1735576231';

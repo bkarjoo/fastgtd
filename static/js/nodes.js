@@ -1,12 +1,13 @@
 // Node operations module - handles node loading, rendering, navigation, and CRUD operations
-import { API_BASE, authToken, nodes, setNodes, expandedNodes, currentRoot, setCurrentRoot, currentPage } from './state.js';
+import { API_BASE, authToken, nodes, setNodes, expandedNodes, currentRoot, setCurrentRoot, currentPage, buildNodeURL } from './state.js';
 import { logout } from './auth.js';
 import { getNodeIcon, updateNavigation } from './ui.js';
 import { navigateToFocus, navigateToDetails } from './navigation.js';
 
-export async function loadNodes() {
+export async function loadNodes(parentId = null) {
     try {
-        const response = await fetch(`${API_BASE}/nodes/`, {
+        const url = buildNodeURL(`${API_BASE}/nodes/`, parentId);
+        const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${authToken}` }
         });
         
