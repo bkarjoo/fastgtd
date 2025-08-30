@@ -115,8 +115,17 @@ export function renderTree() {
     const parentId = currentRoot || null;
     const rootNodes = Object.values(nodes).filter(node => node.parent_id === parentId);
     
-    // Sort by created_at (newest first)
-    rootNodes.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    // Sort by sort_order (lower numbers first), then by created_at
+    rootNodes.sort((a, b) => {
+        // First compare by sort_order (default to 0 if not set)
+        const orderA = a.sort_order ?? 0;
+        const orderB = b.sort_order ?? 0;
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+        // If sort_order is the same, sort by created_at (newest first)
+        return new Date(b.created_at) - new Date(a.created_at);
+    });
 
     if (rootNodes.length === 0) {
         if (currentRoot) {
@@ -217,7 +226,16 @@ function renderNodeItem(node, level) {
     `;
 
     if (hasChildren && isExpanded && node.node_type !== 'smart_folder') {
-        children.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        children.sort((a, b) => {
+            // First compare by sort_order (default to 0 if not set)
+            const orderA = a.sort_order ?? 0;
+            const orderB = b.sort_order ?? 0;
+            if (orderA !== orderB) {
+                return orderA - orderB;
+            }
+            // If sort_order is the same, sort by created_at (newest first)
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
         children.forEach(child => {
             html += renderNodeItem(child, level + 1);
         });

@@ -872,10 +872,8 @@ export async function saveNodeChanges() {
             // Navigate back to details view with fresh data
             navigateToDetails(currentNodeId);
             
-            // Refresh tree if needed
-            if (window.renderTree) {
-                window.renderTree();
-            }
+            // Always refresh the tree to show updated sort order
+            renderTree();
         } else {
             const errorText = await response.text();
             console.error('Save failed:', response.status, errorText);
