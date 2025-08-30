@@ -317,6 +317,10 @@
             }
             
             const navRight = document.getElementById('mainNavRight');
+            if (!navRight) {
+                console.error('mainNavRight element not found');
+                return;
+            }
             
             if (currentRoot) {
                 // Check if we're inside a template
@@ -346,6 +350,7 @@
                     <button onclick="quickCreateTask()" title="Create Task">✅</button>
                     <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
                     <button onclick="quickCreateTemplate()" title="Create Template">📦</button>
+                    <button onclick="showAllTags()" title="View All Tags">🏷️</button>
                     <button onclick="showSettings()" title="Settings">⚙️</button>
                     <button onclick="logout()" title="Logout">🚪</button>
                 `;
@@ -519,11 +524,12 @@
         }
 
         // Close modal when clicking outside
-        document.getElementById('tagModal').addEventListener('click', function(event) {
-            if (event.target === this) {
-                hideTagModal();
-            }
-        });
+        // Commented out - tagModal is now created dynamically by tagging.js
+        // document.getElementById('tagModal').addEventListener('click', function(event) {
+        //     if (event.target === this) {
+        //         hideTagModal();
+        //     }
+        // });
         
         // Smart Folder Rules View Functions
         let currentSmartFolderRulesId = null;
@@ -1414,13 +1420,15 @@
         window.deleteCurrentNode = deleteCurrentNode;
         window.editFocusedNodeTitle = editFocusedNodeTitle;
         window.exitFocusMode = exitFocusMode;
-        window.showTagModal = showTagModal;
-        window.hideTagModal = hideTagModal;
-        window.searchTags = searchTags;
-        window.addExistingTag = addExistingTag;
-        window.addTagFromInput = addTagFromInput;
-        window.removeTag = removeTag;
-        window.handleTagSearchKeydown = handleTagSearchKeydown;
+        // Commented out - these are now handled by tagging.js
+        // window.showTagModal = showTagModal;
+        // window.hideTagModal = hideTagModal;
+        // window.searchTags = searchTags;
+        // Commented out - these are now handled by tagging.js
+        // window.addExistingTag = addExistingTag;
+        // window.addTagFromInput = addTagFromInput;
+        // window.removeTag = removeTag;
+        // window.handleTagSearchKeydown = handleTagSearchKeydown;
         window.editSmartFolderRules = editSmartFolderRules;
         window.saveSmartFolderRules = saveSmartFolderRules;
         window.cancelSmartFolderRulesEdit = cancelSmartFolderRulesEdit;
@@ -1439,3 +1447,4 @@
         window.closeFloatingChat = closeFloatingChat;
         window.sendChatMessage = sendChatMessage;
         window.handleChatKeyPress = handleChatKeyPress;
+        window.updateHeaderButtonsFromMobileApp = updateHeaderButtons;

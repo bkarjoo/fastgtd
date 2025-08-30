@@ -15,7 +15,7 @@
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">
     
     <!-- External stylesheets -->
-    <link rel="stylesheet" href="static/css/mobile.css?v=1735576230">
+    <link rel="stylesheet" href="static/css/mobile.css?v=1756582101">
     <link rel="stylesheet" href="static/css/components.css?v=1735576230">
     
     <!-- Markdown parser -->
@@ -45,6 +45,9 @@
                 <button onclick="quickCreateNote()" title="Create Note">📝</button>
                 <button onclick="quickCreateTask()" title="Create Task">✅</button>
                 <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
+                <button onclick="quickCreateTemplate()" title="Create Template">📦</button>
+                <button onclick="showAllTags()" title="View All Tags">🏷️</button>
+                <button onclick="showSettings()" title="Settings">⚙️</button>
                 <button onclick="logout()" title="Logout">🚪</button>
             </div>
         </header>
@@ -115,6 +118,7 @@
             <div class="nav-right">
                 <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
                 <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="showTagModal()" title="Manage Tags">🏷️</button>
                 <button onclick="logout()" title="Logout">🚪</button>
             </div>
         </header>
@@ -122,6 +126,7 @@
         <div class="note-header">
             <div onclick="closeNoteView(); event.stopPropagation();" style="cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.1);" title="Back to tree view">◀</div>
             <div class="note-title" id="noteViewTitle">Note Title</div>
+            <button onclick="deleteNoteFromView(); event.stopPropagation();" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #ff3b30; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer;" title="Delete this note">×</button>
             <button class="edit-button" onclick="editNote()">✎</button>
         </div>
         <div class="note-content" id="noteViewContent">
@@ -136,6 +141,7 @@
             <div class="nav-right">
                 <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
                 <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="showTagModal()" title="Manage Tags">🏷️</button>
                 <button onclick="logout()" title="Logout">🚪</button>
             </div>
         </header>
@@ -194,35 +200,7 @@
         </div>
     </div>
 
-    <!-- Tag Modal (hidden by default) -->
-    <div id="tagModal" class="tag-modal hidden">
-        <div class="tag-modal-content">
-            <div class="tag-modal-header">
-                <h3 class="tag-modal-title">Manage Tags</h3>
-                <div style="display: flex; gap: 8px;">
-                    <button class="tag-modal-close" onclick="hideTagModal()">×</button>
-                </div>
-            </div>
-            
-            <div class="current-tags">
-                <div class="current-tags-title">Current Tags</div>
-                <div id="currentTagsList"></div>
-            </div>
-            
-            <input 
-                type="text" 
-                class="tag-search-input" 
-                id="tagSearchInput" 
-                placeholder="Search or create tags..."
-                oninput="searchTags()"
-                onkeydown="handleTagSearchKeydown(event)"
-            />
-            
-            <div class="tag-suggestions" id="tagSuggestions" style="display: none;">
-                <!-- Dynamic suggestions will be added here -->
-            </div>
-        </div>
-    </div>
+    <!-- Tag Modal will be created dynamically by tagging.js -->
 
     <!-- Floating Chat Widget -->
     <div id="floatingChat" class="floating-chat">
@@ -251,7 +229,7 @@
     <script src="static/js/templates.js?v=1735576231"></script>
     
     <!-- External JavaScript -->
-    <script type="module" src="static/js/main.js?v=1735576231"></script>
+    <script type="module" src="static/js/main.js?v=1756580818"></script>
     
     
 </body>

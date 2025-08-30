@@ -31,12 +31,31 @@ body {
     display: flex;
     gap: 8px;
     position: relative;
+    overflow-x: auto;
+    max-width: calc(100vw - 32px);
+    padding-bottom: 2px;
+}
+
+/* Hide scrollbar but keep functionality */
+.nav-right::-webkit-scrollbar {
+    height: 2px;
+}
+
+.nav-right::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.nav-right::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 1px;
 }
 
 .nav-left button,
 .nav-right button {
     width: 32px;
     height: 32px;
+    min-width: 32px;
+    flex-shrink: 0;
     border: none;
     background: #f1f1f3;
     border-radius: 6px;
@@ -680,6 +699,28 @@ body.dark-mode .focus-header {
     border-color: #38383a;
 }
 
+/* Tag list specific dark mode styles */
+body.dark-mode .tag-list-container {
+    background: transparent;
+}
+
+body.dark-mode .tag-list-item {
+    background: #2c2c2e;
+}
+
+body.dark-mode .tag-list-item .tag-name {
+    color: #ffffff;
+}
+
+body.dark-mode .tag-list-item .tag-description {
+    color: #98989d;
+}
+
+/* Fix the node tree background in dark mode */
+body.dark-mode #nodeTree {
+    background: #1c1c1e;
+}
+
 body.dark-mode .focus-title {
     color: #ffffff;
 }
@@ -1043,6 +1084,37 @@ body.dark-mode .note-editor-body {
 }
 
 /* Markdown rendering styles */
+/* Fix checkbox task lists */
+.note-content input[type="checkbox"],
+.note-view-content input[type="checkbox"],
+.note-content-preview input[type="checkbox"] {
+    margin-right: 8px;
+    vertical-align: baseline;
+}
+
+/* Task list items */
+.note-content li:has(input[type="checkbox"]),
+.note-view-content li:has(input[type="checkbox"]),
+.note-content-preview li:has(input[type="checkbox"]) {
+    list-style: none;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+/* If the browser doesn't support :has(), use this fallback */
+.note-content ul li,
+.note-view-content ul li,
+.note-content-preview ul li {
+    list-style: none;
+}
+
+.note-content li input[type="checkbox"],
+.note-view-content li input[type="checkbox"],
+.note-content-preview li input[type="checkbox"] {
+    flex-shrink: 0;
+    margin-top: 3px;
+}
 .note-content h1, .note-content h2, .note-content h3, .note-content h4, .note-content h5, .note-content h6 {
     margin: 24px 0 16px 0;
     font-weight: 600;

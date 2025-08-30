@@ -2,25 +2,25 @@
 // Phase 2: Central hub for module imports and global function bindings
 
 // Import URL safety module first (patches fetch globally)
-import './url-safety.js?v=1756568262';
+import './url-safety.js?v=1756580818';
 // Import utility functions for debugging
-import { buildNodeURL } from './state.js?v=1756568262';
+import { buildNodeURL } from './state.js?v=1756580818';
 
 // Import extracted modules
-import { login, logout } from './auth.js?v=1756568262';
-import { toggleDarkMode, backToMain } from './ui.js?v=1756568262';
-import { showSettings, editSettings, saveSettings } from './settings.js?v=1756568262';
-import { toggleExpand, handleNodeClick, handleFolderIconClick, exitFocusMode, toggleTaskComplete, createNode, deleteCurrentNode, editFocusedNodeTitle, handleFocusTitleClick } from './nodes.js?v=1756568262';
-import { toggleAddForm, quickCreateFolder, quickCreateNote, quickCreateTask, quickCreateSmartFolder, quickCreateTemplate, useCurrentTemplate, instantiateTemplate, loadParentOptions, setAddType } from './creation.js?v=1756568262';
-import { openNoteView, closeNoteView, editNote, cancelNoteEdit, saveNote, deleteNoteFromView } from './notes.js?v=1756568262';
-import { initTouchDragAndDrop, handleDragStart, handleDragOver, handleDrop, handleDragEnd, handleDropOut, moveNode, moveNodeOut } from './dragdrop.js?v=1756568262';
-import { showTagModal, hideTagModal, loadCurrentNodeTags } from './tags.js?v=1756568262';
-import { loadSmartFolderContents, refreshSmartFolderContents, refreshAllSmartFolders, loadSmartFolderContentsFocus } from './smartfolders.js?v=1756568262';
-import { toggleFloatingChat, closeFloatingChat, sendChatMessage, sendToAI, updateAIContext, handleChatKeyPress } from './chat.js?v=1756568262';
-import { initializeNavigation, navigateToFocus, navigateToDetails, navigateToEdit, navigateBack, navigateWithUnsavedCheck, saveNodeChanges, deleteNodeFromDetails } from './navigation.js?v=1756568262';
+import { login, logout } from './auth.js?v=1756580818';
+import { toggleDarkMode, backToMain } from './ui.js?v=1756580818';
+import { showSettings, editSettings, saveSettings } from './settings.js?v=1756580818';
+import { toggleExpand, handleNodeClick, handleFolderIconClick, exitFocusMode, toggleTaskComplete, createNode, deleteCurrentNode, editFocusedNodeTitle, handleFocusTitleClick } from './nodes.js?v=1756580818';
+import { toggleAddForm, quickCreateFolder, quickCreateNote, quickCreateTask, quickCreateSmartFolder, quickCreateTemplate, useCurrentTemplate, instantiateTemplate, loadParentOptions, setAddType } from './creation.js?v=1756580818';
+import { openNoteView, closeNoteView, editNote, cancelNoteEdit, saveNote, deleteNoteFromView } from './notes.js?v=1756580818';
+import { initTouchDragAndDrop, handleDragStart, handleDragOver, handleDrop, handleDragEnd, handleDropOut, moveNode, moveNodeOut } from './dragdrop.js?v=1756580818';
+import { loadSmartFolderContents, refreshSmartFolderContents, refreshAllSmartFolders, loadSmartFolderContentsFocus } from './smartfolders.js?v=1756580818';
+import { toggleFloatingChat, closeFloatingChat, sendChatMessage, sendToAI, updateAIContext, handleChatKeyPress } from './chat.js?v=1756580818';
+import { initializeNavigation, navigateToFocus, navigateToDetails, navigateToEdit, navigateBack, navigateWithUnsavedCheck, saveNodeChanges, deleteNodeFromDetails } from './navigation.js?v=1756580818';
+import { showTagModal, hideTagModal, searchForTags, selectTag, createAndApplyTag, removeTag, handleTagKeydown, showAllTags, exitTagsView, createNewTag, deleteTag } from './tagging.js?v=1756582100';
 
 // Import legacy code (still contains most functionality)
-import '../mobile-app.js?v=1756568262';
+import '../mobile-app.js?v=1756580818';
 
 // Global function bindings for HTML onclick handlers
 // These functions are available to all HTML onclick attributes
@@ -73,10 +73,18 @@ window.handleDropOut = handleDropOut;
 window.moveNode = moveNode;
 window.moveNodeOut = moveNodeOut;
 
-// Phase 3 Step 5: Tag Management function bindings (minimal)
+// Phase 3 Step 5: Tag Management function bindings
 window.showTagModal = showTagModal;
 window.hideTagModal = hideTagModal;
-window.loadCurrentNodeTags = loadCurrentNodeTags;
+window.searchForTags = searchForTags;
+window.selectTag = selectTag;
+window.createAndApplyTag = createAndApplyTag;
+window.removeTag = removeTag;
+window.handleTagKeydown = handleTagKeydown;
+window.showAllTags = showAllTags;
+window.exitTagsView = exitTagsView;
+window.createNewTag = createNewTag;
+window.deleteTag = deleteTag;
 
 // Phase 3 Step 6: Smart Folder function bindings (basic loading)
 window.loadSmartFolderContents = loadSmartFolderContents;

@@ -86,7 +86,7 @@ export function renderTree() {
                         <button onclick="logout()" title="Logout">🚪</button>
                     `;
                 } else {
-                    // For other node types, show all buttons
+                    // For other node types (folders, tasks, notes), show all buttons including tag
                     mainNavRight.innerHTML = `
                         <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
                         <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
@@ -94,6 +94,7 @@ export function renderTree() {
                         <button onclick="quickCreateNote()" title="Create Note">📝</button>
                         <button onclick="quickCreateTask()" title="Create Task">✅</button>
                         <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
+                        <button onclick="showTagModal()" title="Manage Tags">🏷️</button>
                         <button onclick="logout()" title="Logout">🚪</button>
                     `;
                 }
@@ -156,6 +157,8 @@ export function renderTree() {
                 <button onclick="quickCreateNote()" title="Create Note">📝</button>
                 <button onclick="quickCreateTask()" title="Create Task">✅</button>
                 <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
+                <button onclick="quickCreateTemplate()" title="Create Template">📦</button>
+                <button onclick="showAllTags()" title="View All Tags">🏷️</button>
                 <button onclick="logout()" title="Logout">🚪</button>
             `;
         }
