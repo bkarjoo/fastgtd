@@ -73,12 +73,11 @@ export function renderTree() {
             if (isTask) {
                 // For tasks in focus, show toggle-able checkbox like in list view
                 iconHtml = `<input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} 
-                           onclick="toggleTaskComplete('${currentNode.id}')" onchange="event.stopPropagation()" 
+                           onclick="toggleTaskComplete('${currentNode.id}'); event.stopPropagation()" onchange="event.stopPropagation()" 
                            style="transform: scale(1.2); margin: 0;">`;
             } else if (currentNode.node_type === 'smart_folder') {
-                // Smart folder
-                const isExpanded = expandedNodes.has(currentNode.id);
-                iconHtml = isExpanded ? '▽' : '▽';
+                // Smart folder - always show diamond icon
+                iconHtml = '💎';
             } else if (currentNode.node_type === 'template') {
                 // Template - show package icon
                 iconHtml = '📦';
@@ -104,7 +103,10 @@ export function renderTree() {
                             <div style="font-size: 16px; display: flex; align-items: center;">${iconHtml}</div>
                             <div class="focus-title" onclick="handleFocusTitleClick(); event.stopPropagation();" style="cursor: pointer; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.05)'" onmouseout="this.style.background='transparent'" title="${currentNode.node_type === 'note' && currentNode.note_data && currentNode.note_data.body !== 'Container folder' ? 'Click to view note content' : currentNode.node_type === 'smart_folder' ? 'Click to view rules' : 'Click to view details'}">${escapeHtml(currentNode.title)}</div>
                         </div>
-                        <button onclick="deleteCurrentNode(); event.stopPropagation();" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #ff3b30; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-left: auto;" title="Delete this ${currentNode.node_type}">×</button>
+                        <div style="display: flex; gap: 8px; margin-left: auto;">
+                            ${currentNode.node_type === 'template' ? `<button onclick="instantiateTemplate(); event.stopPropagation();" style="display: flex; align-items: center; justify-content: center; padding: 4px 12px; background: #34c759; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer;" title="Use this template">Use Template</button>` : ''}
+                            <button onclick="deleteCurrentNode(); event.stopPropagation();" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #ff3b30; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer;" title="Delete this ${currentNode.node_type}">×</button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -167,16 +169,16 @@ function renderNodeItem(node, level) {
         
         if (isCompleted) {
             iconHtml = `<input type="checkbox" class="task-checkbox" checked 
-                       onclick="toggleTaskComplete('${node.id}')" onchange="event.stopPropagation()">`;
+                       onclick="toggleTaskComplete('${node.id}'); event.stopPropagation()" onchange="event.stopPropagation()">`;
         } else if (isInProgress) {
             iconHtml = `<input type="checkbox" class="task-checkbox task-in-progress" 
-                       onclick="toggleTaskComplete('${node.id}')" onchange="event.stopPropagation()">`;
+                       onclick="toggleTaskComplete('${node.id}'); event.stopPropagation()" onchange="event.stopPropagation()">`;
         } else if (isDropped) {
             iconHtml = `<input type="checkbox" class="task-checkbox task-dropped" 
-                       onclick="toggleTaskComplete('${node.id}')" onchange="event.stopPropagation()">`;
+                       onclick="toggleTaskComplete('${node.id}'); event.stopPropagation()" onchange="event.stopPropagation()">`;
         } else {
             iconHtml = `<input type="checkbox" class="task-checkbox" 
-                       onclick="toggleTaskComplete('${node.id}')" onchange="event.stopPropagation()">`;
+                       onclick="toggleTaskComplete('${node.id}'); event.stopPropagation()" onchange="event.stopPropagation()">`;
         }
     } else if (node.node_type === 'smart_folder') {
         iconHtml = `<span class="folder-icon" onclick="handleFolderIconClick('${node.id}'); event.stopPropagation();" style="cursor: pointer; user-select: none;">💎</span>`;
@@ -203,8 +205,9 @@ function renderNodeItem(node, level) {
         if (node.task_data.priority === 'medium') nodeClasses.push('medium-priority');
     }
 
-    const dragAttributes = `draggable="true" ondragstart="handleDragStart(event)" ondragend="handleDragEnd(event)"`;
-    const dropAttributes = `ondragover="handleDragOver(event)" ondrop="handleDrop(event)"`;
+    // Temporarily disabled for testing
+    const dragAttributes = ``; // `draggable="true" ondragstart="handleDragStart(event)" ondragend="handleDragEnd(event)"`;
+    const dropAttributes = ``; // `ondragover="handleDragOver(event)" ondrop="handleDrop(event)"`;
 
     // Add expand triangle for folders/parents
     let expandHtml = '';
@@ -265,7 +268,9 @@ export function handleNodeClick(nodeId, isList) {
         setCurrentRoot(nodeId);
         loadSmartFolderContentsFocus(nodeId);
     } else if (node.node_type === 'template') {
-        useCurrentTemplate();
+        // Enter focus mode for templates to view/edit their contents
+        setCurrentRoot(nodeId);
+        renderTree();
     } else {
         const childCount = Object.values(nodes).filter(n => n.parent_id === nodeId).length;
         

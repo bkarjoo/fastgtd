@@ -333,48 +333,50 @@ function renderNodeDetailsContent(node) {
     const nodeType = node.node_type;
     let html = `<div class="node-metadata">`;
     
-    // Common metadata
-    html += `
-        <div class="metadata-section">
-            <h3>Basic Information</h3>
-            <div class="metadata-item">
-                <label>Type:</label>
-                <span>${getDisplayNodeType(node)}</span>
-            </div>
-            <div class="metadata-item">
-                <label>Created:</label>
-                <span>${new Date(node.created_at).toLocaleString()}</span>
-            </div>
-            <div class="metadata-item">
-                <label>Updated:</label>
-                <span>${new Date(node.updated_at).toLocaleString()}</span>
-            </div>
-        </div>
-    `;
-    
     // Check if this is a folder (either pure node or legacy container)
     const isFolder = (node.node_type === 'node') || 
                     (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder');
     
-    if (isFolder) {
-        html += renderGenericNodeDetails(node);
+    // For tasks, render task details first (without Basic Information)
+    if (nodeType === 'task') {
+        html += renderTaskDetails(node);
     } else {
-        // Node-specific content for non-folders
-        switch (nodeType) {
-            case 'task':
-                html += renderTaskDetails(node);
-                break;
-            case 'note':
-                html += renderNoteDetails(node);
-                break;
-            case 'smart_folder':
-                html += renderSmartFolderDetails(node);
-                break;
-            case 'template':
-                html += renderTemplateDetails(node);
-                break;
-            default:
-                html += renderGenericNodeDetails(node);
+        // For non-tasks, show Basic Information first
+        html += `
+            <div class="metadata-section">
+                <h3>Basic Information</h3>
+                <div class="metadata-item">
+                    <label>Type:</label>
+                    <span>${getDisplayNodeType(node)}</span>
+                </div>
+                <div class="metadata-item">
+                    <label>Created:</label>
+                    <span>${new Date(node.created_at).toLocaleString()}</span>
+                </div>
+                <div class="metadata-item">
+                    <label>Updated:</label>
+                    <span>${new Date(node.updated_at).toLocaleString()}</span>
+                </div>
+            </div>
+        `;
+        
+        if (isFolder) {
+            html += renderGenericNodeDetails(node);
+        } else {
+            // Node-specific content for non-folders
+            switch (nodeType) {
+                case 'note':
+                    html += renderNoteDetails(node);
+                    break;
+                case 'smart_folder':
+                    html += renderSmartFolderDetails(node);
+                    break;
+                case 'template':
+                    html += renderTemplateDetails(node);
+                    break;
+                default:
+                    html += renderGenericNodeDetails(node);
+            }
         }
     }
     
@@ -419,42 +421,51 @@ function renderNodeEditForm(node) {
 // Node-specific detail renderers (to be implemented)
 function renderTaskDetails(node) {
     const taskData = node.task_data || {};
-    let html = `
+    let html = '';
+    
+    // Show description prominently at the top without a label
+    html += `
+        <div style="font-size: 1em; line-height: 1.4; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px; margin-bottom: 20px; text-align: left !important; display: block; white-space: normal; margin: 0 0 20px 0;">
+            ${taskData.description || '<em style="color: #999;">No description provided</em>'}
+        </div>`;
+    
+    // Important task metadata
+    html += `
         <div class="metadata-section">
-            <h3>Task Information</h3>
+            <h3>Task Status</h3>
             <div class="metadata-item">
                 <label>Status:</label>
-                <span class="task-status-${taskData.status}">${taskData.status || 'todo'}</span>
+                <span class="task-status-${taskData.status}" style="font-weight: 600; padding: 2px 8px; border-radius: 4px;">${taskData.status || 'todo'}</span>
             </div>
             <div class="metadata-item">
                 <label>Priority:</label>
-                <span class="task-priority-${taskData.priority}">${taskData.priority || 'medium'}</span>
+                <span class="task-priority-${taskData.priority}" style="font-weight: 600; padding: 2px 8px; border-radius: 4px;">${taskData.priority || 'medium'}</span>
             </div>`;
     
-    // Always show description field
+    // Dates section
     html += `
-        <div class="metadata-item">
-            <label>Description:</label>
-            <div class="task-description">${taskData.description || '<em>No description</em>'}</div>
-        </div>`;
+            <div class="metadata-item">
+                <label>Due Date:</label>
+                <span>${taskData.due_at ? new Date(taskData.due_at).toLocaleString() : 'Not set'}</span>
+            </div>
+            <div class="metadata-item">
+                <label>Start Date:</label>
+                <span>${taskData.earliest_start_at ? new Date(taskData.earliest_start_at).toLocaleString() : 'Not set'}</span>
+            </div>`;
     
+    // Organization metadata (less prominent)
     html += `
-        <div class="metadata-item">
-            <label>Due Date:</label>
-            <span>${taskData.due_at ? new Date(taskData.due_at).toLocaleString() : 'Not set'}</span>
         </div>
-        <div class="metadata-item">
-            <label>Start Date:</label>
-            <span>${taskData.earliest_start_at ? new Date(taskData.earliest_start_at).toLocaleString() : 'Not set'}</span>
-        </div>
-        <div class="metadata-item">
-            <label>Parent:</label>
-            <span>${node.parent_id ? (nodes[node.parent_id]?.title || 'Unknown') : 'Root level'}</span>
-        </div>
-        <div class="metadata-item">
-            <label>Sort Order:</label>
-            <span>${node.sort_order || 0}</span>
-        </div>`;
+        <div class="metadata-section">
+            <h3>Organization</h3>
+            <div class="metadata-item">
+                <label>Parent:</label>
+                <span>${node.parent_id ? (nodes[node.parent_id]?.title || 'Unknown') : 'Root level'}</span>
+            </div>
+            <div class="metadata-item">
+                <label>Sort Order:</label>
+                <span>${node.sort_order || 0}</span>
+            </div>`;
     
     if (taskData.completed_at) {
         html += `
@@ -551,17 +562,22 @@ function renderGenericNodeDetails(node) {
 function renderTaskEditForm(node) {
     const taskData = node.task_data || {};
     
-    // Format dates for separate date/time input fields
+    // Format dates for separate date/time input fields (using local time)
     const formatDateForInput = (dateString) => {
         if (!dateString) return '';
         const date = new Date(dateString);
-        return date.toISOString().slice(0, 10); // YYYY-MM-DD
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`; // YYYY-MM-DD in local time
     };
     
     const formatTimeForInput = (dateString) => {
         if (!dateString) return '';
         const date = new Date(dateString);
-        return date.toISOString().slice(11, 16); // HH:MM
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}`; // HH:MM in local time
     };
     
     return `
@@ -590,14 +606,14 @@ function renderTaskEditForm(node) {
             <label>Due Date & Time:</label>
             <div class="date-time-inputs">
                 <input type="date" id="taskDueDate" name="due_date" value="${formatDateForInput(taskData.due_at)}" placeholder="Date">
-                <input type="time" id="taskDueTime" name="due_time" value="${formatTimeForInput(taskData.due_at)}" placeholder="Time">
+                <input type="time" id="taskDueTime" name="due_time" value="${formatTimeForInput(taskData.due_at)}">
             </div>
         </div>
         <div class="form-section">
             <label>Earliest Start Date & Time:</label>
             <div class="date-time-inputs">
                 <input type="date" id="taskStartDate" name="start_date" value="${formatDateForInput(taskData.earliest_start_at)}" placeholder="Date">
-                <input type="time" id="taskStartTime" name="start_time" value="${formatTimeForInput(taskData.earliest_start_at)}" placeholder="Time">
+                <input type="time" id="taskStartTime" name="start_time" value="${formatTimeForInput(taskData.earliest_start_at)}">
             </div>
         </div>
         <div class="form-section">

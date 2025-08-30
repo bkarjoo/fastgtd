@@ -47,6 +47,42 @@ export function editNote() {
     }, 100);
 }
 
+export async function deleteNoteFromView() {
+    if (!currentNoteId) return;
+    
+    const node = nodes[currentNoteId];
+    if (!node) return;
+    
+    const confirmMessage = `Are you sure you want to delete "${node.title}"?`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/nodes/${currentNoteId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        if (response.ok) {
+            // Remove from local nodes
+            delete nodes[currentNoteId];
+            
+            // Close note view and return to tree
+            closeNoteView();
+            
+            // Refresh the tree
+            renderTree();
+        } else {
+            alert('Failed to delete note');
+        }
+    } catch (error) {
+        console.error('Error deleting note:', error);
+        alert('Error deleting note');
+    }
+}
+
 export function cancelNoteEdit() {
     // Go back to note view
     document.getElementById('noteEditor').classList.add('hidden');

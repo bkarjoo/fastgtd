@@ -1,16 +1,14 @@
-// Creation module - handles quick creation of nodes and form management
-import { API_BASE, authToken, nodes, currentRoot, setCurrentRoot, currentNodeId, currentView, addType, setAddType as stateSetAddType } from './state.js';
+// Creation module - handles creating nodes, folders, tasks, notes, and smart folders
+import { API_BASE, authToken, nodes, currentRoot, currentView, currentNodeId, setCurrentRoot } from './state.js';
 import { renderTree } from './nodes.js';
 import { navigateToFocus } from './navigation.js';
 
-export function toggleAddForm() {
-    const addForm = document.getElementById('addForm');
-    if (addForm.style.display === 'none' || !addForm.style.display) {
-        addForm.style.display = 'block';
-        loadParentOptions();
-        document.getElementById('nodeTitle').focus();
+// Helper to refresh smart folders
+function refreshAllSmartFolders() {
+    if (typeof window.refreshAllSmartFolders === 'function') {
+        window.refreshAllSmartFolders();
     } else {
-        addForm.style.display = 'none';
+        console.log('Smart folder refresh not available yet');
     }
 }
 
@@ -21,10 +19,15 @@ export async function quickCreateFolder() {
     // Determine parent: use currentNodeId if in details/edit view, otherwise currentRoot
     const parentId = (currentView === 'details' || currentView === 'edit') ? currentNodeId : currentRoot;
     
+    // Calculate sort order (increment by 10)
+    const siblings = Object.values(nodes).filter(n => n.parent_id === parentId);
+    const maxSortOrder = siblings.reduce((max, node) => Math.max(max, node.sort_order || 0), 0);
+    
     const nodeData = {
         node_type: 'note',
         title: folderName.trim(),
         parent_id: parentId || null,
+        sort_order: maxSortOrder + 10,
         note_data: {
             body: 'Container folder'
         }
@@ -67,15 +70,15 @@ export async function quickCreateNote() {
     // Determine parent: use currentNodeId if in details/edit view, otherwise currentRoot
     const parentId = (currentView === 'details' || currentView === 'edit') ? currentNodeId : currentRoot;
     
-    // Calculate sort order (put at end of siblings)
+    // Calculate sort order (increment by 10)
     const siblings = Object.values(nodes).filter(n => n.parent_id === parentId);
-    const maxSortOrder = siblings.reduce((max, node) => Math.max(max, node.sort_order || 0), -1);
+    const maxSortOrder = siblings.reduce((max, node) => Math.max(max, node.sort_order || 0), 0);
     
     const nodeData = {
         node_type: 'note', 
         title: noteName.trim(),
         parent_id: parentId || null,
-        sort_order: maxSortOrder + 1,
+        sort_order: maxSortOrder + 10,
         note_data: {
             body: ' '
         }
@@ -118,10 +121,15 @@ export async function quickCreateTask() {
     // Determine parent: use currentNodeId if in details/edit view, otherwise currentRoot
     const parentId = (currentView === 'details' || currentView === 'edit') ? currentNodeId : currentRoot;
     
+    // Calculate sort order (increment by 10)
+    const siblings = Object.values(nodes).filter(n => n.parent_id === parentId);
+    const maxSortOrder = siblings.reduce((max, node) => Math.max(max, node.sort_order || 0), 0);
+    
     const nodeData = {
         node_type: 'task',
         title: taskName.trim(),
         parent_id: parentId || null,
+        sort_order: maxSortOrder + 10,
         task_data: {
             status: 'todo',
             priority: 'medium'
@@ -166,15 +174,15 @@ export async function quickCreateSmartFolder() {
     // Determine parent: use currentNodeId if in details/edit view, otherwise currentRoot
     const parentId = (currentView === 'details' || currentView === 'edit') ? currentNodeId : currentRoot;
     
-    // Calculate sort order (put at end of siblings)
+    // Calculate sort order (increment by 10)
     const siblings = Object.values(nodes).filter(n => n.parent_id === parentId);
-    const maxSortOrder = siblings.reduce((max, node) => Math.max(max, node.sort_order || 0), -1);
+    const maxSortOrder = siblings.reduce((max, node) => Math.max(max, node.sort_order || 0), 0);
     
     const nodeData = {
         node_type: 'smart_folder',
         title: folderName.trim(),
         parent_id: parentId || null,
-        sort_order: maxSortOrder + 1,
+        sort_order: maxSortOrder + 10,
         smart_folder_data: {
             rules: null,
             auto_refresh: true,
@@ -216,12 +224,20 @@ export async function quickCreateTemplate() {
     const templateName = prompt('Template name:');
     if (!templateName || !templateName.trim()) return;
     
+    // Calculate sort order (increment by 10)
+    const parentId = currentRoot;
+    const siblings = Object.values(nodes).filter(n => n.parent_id === parentId);
+    const maxSortOrder = siblings.reduce((max, node) => Math.max(max, node.sort_order || 0), 0);
+    
     const nodeData = {
         node_type: 'template',
         title: templateName.trim(),
-        parent_id: currentRoot || null,
+        parent_id: parentId || null,
+        sort_order: maxSortOrder + 10,
         template_data: {
-            template_content: []
+            description: '',
+            category: 'General',
+            usage_count: 0
         }
     };
     
@@ -241,7 +257,9 @@ export async function quickCreateTemplate() {
             renderTree();
             refreshAllSmartFolders();
         } else {
-            alert('Failed to create template');
+            const errorText = await response.text();
+            console.error('Template creation failed:', response.status, errorText);
+            alert(`Failed to create template: ${response.status} - ${errorText}`);
         }
     } catch (error) {
         console.error('Error creating template:', error);
@@ -249,22 +267,156 @@ export async function quickCreateTemplate() {
     }
 }
 
-export async function useCurrentTemplate() {
+export async function instantiateTemplate() {
     if (!currentRoot) return;
     
     const template = nodes[currentRoot];
     if (!template || template.node_type !== 'template') return;
     
-    // For now, just create a copy of the template
-    const copyName = template.title + ' (Copy)';
-    const nodeData = {
-        node_type: 'note',
-        title: copyName,
-        parent_id: template.parent_id,
-        note_data: {
-            body: `Template: ${template.title}`
+    // Prompt for the new folder name with a prepopulated suggestion
+    const suggestedName = template.title + ' (copy)';
+    const newName = prompt('Name for the new folder:', suggestedName);
+    if (!newName || !newName.trim()) return;
+    
+    // Helper function to deep copy nodes
+    async function copyNodeRecursively(sourceNode, newParentId, isRoot = false) {
+        // Determine the new node type and data
+        let nodeData;
+        
+        if (isRoot) {
+            // Convert template to folder (using 'note' type with Container folder body)
+            nodeData = {
+                node_type: 'note',
+                title: newName.trim(),
+                parent_id: newParentId,
+                sort_order: sourceNode.sort_order || 0,
+                note_data: {
+                    body: 'Container folder'
+                }
+            };
+        } else {
+            // Copy child nodes with their original types
+            // Handle invalid node types by converting them to notes
+            let nodeType = sourceNode.node_type;
+            if (!['task', 'note', 'smart_folder', 'template'].includes(nodeType)) {
+                nodeType = 'note';  // Default to note for unknown types
+            }
+            
+            nodeData = {
+                node_type: nodeType,
+                title: sourceNode.title,
+                parent_id: newParentId,
+                sort_order: sourceNode.sort_order || 0
+            };
+            
+            // Copy type-specific data
+            if (nodeType === 'task' && sourceNode.task_data) {
+                nodeData.task_data = { ...sourceNode.task_data };
+            } else if (nodeType === 'note') {
+                if (sourceNode.note_data) {
+                    nodeData.note_data = { ...sourceNode.note_data };
+                } else {
+                    // If original node didn't have note_data, create it
+                    nodeData.note_data = { body: 'Container folder' };
+                }
+            } else if (nodeType === 'smart_folder' && sourceNode.smart_folder_data) {
+                nodeData.smart_folder_data = { ...sourceNode.smart_folder_data };
+            } else if (nodeType === 'template' && sourceNode.template_data) {
+                nodeData.template_data = { ...sourceNode.template_data };
+            }
         }
+        
+        // Create the node
+        try {
+            const response = await fetch(`${API_BASE}/nodes/`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}` 
+                },
+                body: JSON.stringify(nodeData)
+            });
+            
+            if (response.ok) {
+                const newNode = await response.json();
+                nodes[newNode.id] = newNode;
+                
+                // Find and copy all children of the source node
+                const children = Object.values(nodes).filter(n => n.parent_id === sourceNode.id);
+                for (const child of children) {
+                    await copyNodeRecursively(child, newNode.id, false);
+                }
+                
+                return newNode;
+            } else {
+                console.error('Failed to copy node:', await response.text());
+                return null;
+            }
+        } catch (error) {
+            console.error('Error copying node:', error);
+            return null;
+        }
+    }
+    
+    try {
+        // Start the deep copy from the template root
+        const newFolder = await copyNodeRecursively(template, template.parent_id, true);
+        
+        if (newFolder) {
+            // Navigate to the parent node, or root if no parent
+            const parentId = template.parent_id || null;
+            setCurrentRoot(parentId);
+            
+            // Refresh the tree to show the new folder
+            renderTree();
+            refreshAllSmartFolders();
+        } else {
+            alert('Failed to instantiate template');
+        }
+    } catch (error) {
+        console.error('Error instantiating template:', error);
+        alert('Error instantiating template');
+    }
+}
+
+// Deprecated - keeping for backward compatibility
+export async function useCurrentTemplate() {
+    // Redirect to instantiateTemplate
+    return instantiateTemplate();
+}
+
+export async function createNode(type) {
+    const nodeData = {
+        node_type: type || 'note'
     };
+    
+    const titleInput = document.getElementById('newNodeTitle');
+    const parentSelect = document.getElementById('newNodeParent');
+    
+    nodeData.title = titleInput.value.trim();
+    nodeData.parent_id = parentSelect.value || null;
+    
+    if (!nodeData.title) {
+        alert('Please enter a title');
+        return;
+    }
+    
+    if (type === 'task') {
+        nodeData.task_data = {
+            status: 'todo',
+            priority: 'medium'
+        };
+    } else if (type === 'note' || !type) {
+        nodeData.note_data = {
+            body: document.getElementById('nodeType').value === 'folder' ? 'Container folder' : ''
+        };
+    } else if (type === 'smart_folder') {
+        const rules = buildSmartFolderRules ? buildSmartFolderRules() : [];
+        nodeData.smart_folder_data = {
+            rules: rules.length > 0 ? { conditions: rules, logic: 'all' } : null,
+            auto_refresh: true
+        };
+    }
     
     try {
         const response = await fetch(`${API_BASE}/nodes/`, {
@@ -279,65 +431,61 @@ export async function useCurrentTemplate() {
         if (response.ok) {
             const newNode = await response.json();
             nodes[newNode.id] = newNode;
-            setCurrentRoot(template.parent_id);
             renderTree();
+            toggleAddForm();
+            titleInput.value = '';
             refreshAllSmartFolders();
         } else {
-            alert('Failed to use template');
+            const errorData = await response.json();
+            alert(`Failed to create node: ${errorData.detail || 'Unknown error'}`);
         }
     } catch (error) {
-        console.error('Error using template:', error);
-        alert('Error using template');
+        console.error('Error creating node:', error);
+        alert('Error creating node');
+    }
+}
+
+export function toggleAddForm() {
+    const form = document.getElementById('addForm');
+    if (form) {
+        form.classList.toggle('hidden');
+        if (!form.classList.contains('hidden')) {
+            document.getElementById('newNodeTitle').focus();
+            loadParentOptions();
+        }
     }
 }
 
 export function loadParentOptions() {
-    const parentSelect = document.getElementById('parentNodeSelect');
-    if (!parentSelect) return;
+    const select = document.getElementById('newNodeParent');
+    if (!select) return;
     
-    // Clear existing options
-    parentSelect.innerHTML = '';
+    select.innerHTML = '<option value="">Root</option>';
     
-    // Add default option
-    const defaultOption = document.createElement('option');
-    defaultOption.value = '';
-    defaultOption.textContent = currentRoot ? 'Current folder' : 'Root level';
-    parentSelect.appendChild(defaultOption);
-    
-    // Add other folder options
     const folders = Object.values(nodes).filter(node => 
-        node.node_type === 'node' ||
-        (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder') ||
-        node.node_type === 'smart_folder'
+        node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder'
     );
     
     folders.forEach(folder => {
-        const option = document.createElement('option');
-        option.value = folder.id;
-        const icon = folder.node_type === 'smart_folder' ? '💎' : '📁';
-        option.textContent = `${icon} ${folder.title}`;
-        parentSelect.appendChild(option);
-    });
-}
-
-export function setAddType(type) {
-    stateSetAddType(type);
-    
-    // Update UI to reflect the selected type
-    const buttons = document.querySelectorAll('.add-type-btn');
-    buttons.forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.type === type) {
-            btn.classList.add('active');
-        }
+        select.innerHTML += `<option value="${folder.id}">${folder.title}</option>`;
     });
     
-    // Show/hide type-specific sections
-    const taskSection = document.getElementById('taskSection');
-    if (taskSection) {
-        taskSection.style.display = type === 'task' ? 'block' : 'none';
+    if (currentRoot) {
+        select.value = currentRoot;
     }
 }
 
-// These functions are defined in mobile-app.js and will be extracted in later steps
-function refreshAllSmartFolders() { if (typeof window.refreshAllSmartFolders === 'function') window.refreshAllSmartFolders(); }
+export function setAddType(type) {
+    const nodeType = document.getElementById('nodeType');
+    if (nodeType) {
+        nodeType.value = type;
+    }
+}
+
+// Helper for smart folder rules that will be defined elsewhere
+function buildSmartFolderRules() {
+    if (typeof window.buildSmartFolderRules === 'function') {
+        return window.buildSmartFolderRules();
+    }
+    return [];
+}
