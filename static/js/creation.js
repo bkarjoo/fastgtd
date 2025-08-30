@@ -22,9 +22,12 @@ export async function quickCreateFolder() {
     const parentId = (currentView === 'details' || currentView === 'edit') ? currentNodeId : currentRoot;
     
     const nodeData = {
-        node_type: 'node',
+        node_type: 'note',
         title: folderName.trim(),
-        parent_id: parentId || null
+        parent_id: parentId || null,
+        note_data: {
+            body: 'Container folder'
+        }
     };
     
     try {
