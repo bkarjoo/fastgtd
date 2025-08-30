@@ -7,9 +7,50 @@ export function openNoteView(nodeId) {
     if (!node || node.node_type !== 'note') return;
     
     setCurrentNoteId(nodeId);
+    // Also set it on window for compatibility
+    window.currentNoteId = nodeId;
     
     // Update note view content
     document.getElementById('noteViewTitle').textContent = node.title;
+    
+    // Add tags display between header and content
+    const noteContent = document.getElementById('noteViewContent');
+    const noteHeader = document.querySelector('#noteView .note-header');
+    
+    // Remove existing tags section if present
+    const existingTags = document.querySelector('#noteView .node-tags-section');
+    if (existingTags) {
+        existingTags.remove();
+    }
+    
+    // Create tags section
+    const tagsSection = document.createElement('div');
+    tagsSection.className = 'node-tags-section';
+    tagsSection.style.cssText = 'padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: #f8f9fa; border-bottom: 1px solid #e0e0e0; min-height: 48px;';
+    
+    // Add tags if they exist
+    if (node.tags && node.tags.length > 0) {
+        node.tags.forEach(tag => {
+            const tagBubble = document.createElement('span');
+            tagBubble.className = 'tag-bubble';
+            tagBubble.style.cssText = 'display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: #007AFF; color: white; border-radius: 12px; font-size: 12px; font-weight: 500;';
+            tagBubble.innerHTML = `
+                ${tag.name}
+                <button onclick="removeTagFromNoteView('${nodeId}', '${tag.id}')" style="background: none; border: none; color: white; cursor: pointer; padding: 0; margin: 0; font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; opacity: 0.8;">×</button>
+            `;
+            tagsSection.appendChild(tagBubble);
+        });
+    } else {
+        const noTags = document.createElement('span');
+        noTags.style.cssText = 'color: #999; font-size: 12px; font-style: italic;';
+        noTags.textContent = 'No tags';
+        tagsSection.appendChild(noTags);
+    }
+    
+    // Insert tags section before the content (after header)
+    if (noteContent && noteContent.parentNode) {
+        noteContent.parentNode.insertBefore(tagsSection, noteContent);
+    }
     
     // Render markdown content
     const markdownContent = (node.note_data && node.note_data.body) || '';
@@ -25,6 +66,8 @@ export function closeNoteView() {
     document.getElementById('noteView').classList.add('hidden');
     document.getElementById('mainApp').classList.remove('hidden');
     setCurrentNoteId(null);
+    // Also clear it on window for compatibility
+    window.currentNoteId = null;
 }
 
 export function editNote() {
@@ -161,3 +204,35 @@ export async function saveNote() {
 
 // These functions are defined in mobile-app.js and will be extracted in later steps
 function refreshAllSmartFolders() { if (typeof window.refreshAllSmartFolders === 'function') window.refreshAllSmartFolders(); }
+
+// Function to remove a tag from a note
+async function removeTagFromNoteView(nodeId, tagId) {
+    if (!confirm('Remove this tag?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/nodes/${nodeId}/tags/${tagId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        if (response.ok) {
+            // Update local node data
+            if (nodes[nodeId] && nodes[nodeId].tags) {
+                nodes[nodeId].tags = nodes[nodeId].tags.filter(tag => tag.id !== tagId);
+            }
+            
+            // Re-render the note view to show updated tags
+            openNoteView(nodeId);
+        } else {
+            alert('Failed to remove tag');
+        }
+    } catch (error) {
+        console.error('Error removing tag:', error);
+        alert('Error removing tag');
+    }
+}
+
+// Make it globally available
+window.removeTagFromNoteView = removeTagFromNoteView;

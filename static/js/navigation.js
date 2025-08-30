@@ -161,7 +161,7 @@ export function navigateWithUnsavedCheck(navigateFunction, ...args) {
 }
 
 // Render the Details Page (read-only)
-function renderDetailsPage(nodeId) {
+export function renderDetailsPage(nodeId) {
     const node = nodes[nodeId];
     if (!node) return;
     
@@ -181,6 +181,43 @@ function renderDetailsPage(nodeId) {
     }
     if (editButton) {
         editButton.setAttribute('onclick', `navigateToEdit('${nodeId}')`);
+    }
+    
+    // Add tags display for folders, tasks, and notes
+    const pageHeader = container.querySelector('.page-header');
+    if (pageHeader && (node.node_type === 'folder' || node.node_type === 'task' || node.node_type === 'note' || node.node_type === 'node')) {
+        // Check if tags section already exists and remove it
+        const existingTags = container.querySelector('.node-tags-section');
+        if (existingTags) {
+            existingTags.remove();
+        }
+        
+        // Create tags section
+        const tagsSection = document.createElement('div');
+        tagsSection.className = 'node-tags-section';
+        tagsSection.style.cssText = 'padding: 8px 16px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border-bottom: 1px solid rgba(0, 0, 0, 0.1);';
+        
+        // Add tags if they exist
+        if (node.tags && node.tags.length > 0) {
+            node.tags.forEach(tag => {
+                const tagBubble = document.createElement('span');
+                tagBubble.className = 'tag-bubble';
+                tagBubble.style.cssText = 'display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: #007AFF; color: white; border-radius: 12px; font-size: 12px;';
+                tagBubble.innerHTML = `
+                    ${tag.name}
+                    <button onclick="removeTagFromNode('${nodeId}', '${tag.id}')" style="background: none; border: none; color: white; cursor: pointer; padding: 0; margin: 0; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px;">×</button>
+                `;
+                tagsSection.appendChild(tagBubble);
+            });
+        } else {
+            const noTags = document.createElement('span');
+            noTags.style.cssText = 'color: #999; font-size: 12px; font-style: italic;';
+            noTags.textContent = 'No tags';
+            tagsSection.appendChild(noTags);
+        }
+        
+        // Insert tags section after the page header
+        pageHeader.insertAdjacentElement('afterend', tagsSection);
     }
     
     // Update navigation buttons based on node type
@@ -1002,6 +1039,38 @@ window.navigateBack = navigateBack;
 window.navigateWithUnsavedCheck = navigateWithUnsavedCheck;
 window.saveNodeChanges = saveNodeChanges;
 window.deleteNodeFromDetails = deleteNodeFromDetails;
+
+// Function to remove a tag from a node
+async function removeTagFromNode(nodeId, tagId) {
+    if (!confirm('Remove this tag?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/nodes/${nodeId}/tags/${tagId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        if (response.ok) {
+            // Update local node data
+            if (nodes[nodeId] && nodes[nodeId].tags) {
+                nodes[nodeId].tags = nodes[nodeId].tags.filter(tag => tag.id !== tagId);
+            }
+            
+            // Re-render the details page to show updated tags
+            renderDetailsPage(nodeId);
+        } else {
+            alert('Failed to remove tag');
+        }
+    } catch (error) {
+        console.error('Error removing tag:', error);
+        alert('Error removing tag');
+    }
+}
+
+window.removeTagFromNode = removeTagFromNode;
+
 // These functions are already bound globally in main.js
 // window.logout = logout;
 // window.toggleDarkMode = toggleDarkMode;  

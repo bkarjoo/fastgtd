@@ -1,6 +1,8 @@
 // Tagging module - handles tag creation, search, and application to nodes
-import { API_BASE, authToken, currentRoot, currentNodeId, currentView, setCurrentRoot } from './state.js';
+import { API_BASE, authToken, currentRoot, currentNodeId, currentNoteId, currentView, nodes, setCurrentRoot } from './state.js';
 import { renderTree } from './nodes.js';
+import { openNoteView } from './notes.js';
+import { renderDetailsPage } from './navigation.js';
 
 // Variables to track tag modal state
 let currentTaggingNodeId = null;
@@ -11,12 +13,44 @@ let appliedTags = [];
 export async function showTagModal(nodeId) {
     // Determine which node we're tagging based on context
     if (!nodeId) {
-        if (currentView === 'focus' && currentRoot) {
+        // Check if we're in note view or note edit mode
+        const noteView = document.getElementById('noteView');
+        const noteEditor = document.getElementById('noteEditor');
+        
+        // Try to get currentNoteId from either the imported value or window
+        const noteId = currentNoteId || window.currentNoteId;
+        
+        console.log('Checking for node ID - noteView hidden:', noteView?.classList.contains('hidden'), 
+                    'noteEditor hidden:', noteEditor?.classList.contains('hidden'),
+                    'currentNoteId (imported):', currentNoteId,
+                    'currentNoteId (window):', window.currentNoteId,
+                    'noteId (resolved):', noteId,
+                    'currentNodeId:', currentNodeId,
+                    'currentView:', currentView);
+        
+        if (noteView && !noteView.classList.contains('hidden') && noteId) {
+            nodeId = noteId;
+            console.log('Using currentNoteId from note view:', nodeId);
+        } else if (noteEditor && !noteEditor.classList.contains('hidden') && noteId) {
+            nodeId = noteId;
+            console.log('Using currentNoteId from note editor:', nodeId);
+        } else if (currentView === 'focus' && currentRoot) {
             nodeId = currentRoot;
+            console.log('Using currentRoot from focus view:', nodeId);
         } else if (currentView === 'details' || currentView === 'edit') {
             nodeId = currentNodeId;
+            console.log('Using currentNodeId from details/edit view:', nodeId);
         } else {
             console.error('No node ID available for tagging');
+            console.error('Debug info:', {
+                noteViewHidden: noteView?.classList.contains('hidden'),
+                noteEditorHidden: noteEditor?.classList.contains('hidden'),
+                currentNoteId_imported: currentNoteId,
+                currentNoteId_window: window.currentNoteId,
+                currentNodeId,
+                currentView,
+                currentRoot
+            });
             return;
         }
     }
@@ -292,6 +326,22 @@ async function loadNodeTags(nodeId) {
         if (response.ok) {
             appliedTags = await response.json();
             renderCurrentTags();
+            
+            // Update the node's tags in local state
+            if (nodes && nodes[nodeId]) {
+                nodes[nodeId].tags = appliedTags;
+            }
+            
+            // If we're in note view, refresh it to show the updated tags
+            const noteView = document.getElementById('noteView');
+            if (noteView && !noteView.classList.contains('hidden') && currentNoteId === nodeId) {
+                openNoteView(nodeId);
+            }
+            
+            // If we're in details view, refresh it to show the updated tags
+            if (currentView === 'details' && currentNodeId === nodeId) {
+                renderDetailsPage(nodeId);
+            }
         }
     } catch (error) {
         console.error('Error loading node tags:', error);

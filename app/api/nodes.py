@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.db.deps import get_db
 from app.models.user import User
 from app.models.node import Node, Task, Note, SmartFolder, Template, Folder
-from app.models.tag import Tag
+from app.models.tag import Tag, node_tags
 from app.schemas.node import (
     NodeCreate, NodeUpdate, NodeResponse, TaskCreate, TaskUpdate, TaskResponse,
     NoteCreate, NoteUpdate, NoteResponse, FolderCreate, FolderUpdate, FolderResponse,
@@ -18,6 +18,7 @@ from app.schemas.node import (
     NodeResponseUnion, NodeFilter, NodeTree, NodeTreeItem, 
     NodeMove, NodeReorder, create_node_response
 )
+from app.schemas.tag import TagResponse
 from app.api.auth import get_current_user
 from app.services.smart_folder_engine import SmartFolderRulesEngine
 
@@ -455,6 +456,23 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
     children_result = await session.execute(children_query)
     children_count = children_result.scalar() or 0
     
+    # Load tags for the node
+    tags_query = select(Tag).join(node_tags).where(node_tags.c.node_id == node.id)
+    tags_result = await session.execute(tags_query)
+    tags = tags_result.scalars().all()
+    
+    # Convert tags to response format
+    tag_responses = [
+        TagResponse(
+            id=tag.id,
+            name=tag.name,
+            description=tag.description,
+            color=tag.color,
+            created_at=tag.created_at
+        )
+        for tag in tags
+    ]
+    
     base_data = {
         "id": node.id,
         "owner_id": node.owner_id,
@@ -465,7 +483,8 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
         "created_at": node.created_at,
         "updated_at": node.updated_at,
         "is_list": children_count > 0,
-        "children_count": children_count
+        "children_count": children_count,
+        "tags": tag_responses
     }
     
     if node.node_type == "task":

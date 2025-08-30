@@ -33,3 +33,15 @@ class TagOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TagResponse(BaseModel):
+    """Simple tag response for node tags"""
+    id: uuid.UUID
+    name: str
+    description: str | None = None
+    color: str | None = None
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from app.models.enums import TaskStatus, TaskPriority
+from app.schemas.tag import TagResponse
 
 
 # Base Node schemas
@@ -159,6 +160,9 @@ class NodeResponse(NodeBase):
     # Computed properties
     is_list: bool = False
     children_count: int = 0
+    
+    # Related data
+    tags: List[TagResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 

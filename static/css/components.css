@@ -2,6 +2,59 @@
 
 /* TODO: Move component styles from mobile-styles.css here */
 
+/* Tag Bubbles */
+.node-tags-section {
+    padding: 8px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.tag-bubble {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: #007AFF;
+    color: white;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.tag-bubble button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.tag-bubble button:hover {
+    opacity: 1;
+}
+
+/* Dark mode support for tag bubbles */
+.dark-mode .node-tags-section {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .tag-bubble {
+    background: #0A84FF;
+}
+
 /* Node Page Components for 3-page flow */
 .node-page {
     position: fixed;
