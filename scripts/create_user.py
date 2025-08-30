@@ -2,14 +2,13 @@ import argparse
 import asyncio
 from sqlalchemy import select
 
-from app.db.session import get_sessionmaker
+from app.db.session import async_session_maker
 from app.models.user import User
 from app.core.security import hash_password
 
 
 async def create_user(email: str, password: str, full_name: str | None = None, active: bool = True) -> User:
-    SessionLocal = get_sessionmaker()
-    async with SessionLocal() as db:
+    async with async_session_maker() as db:
         # Normalize email to lowercase
         email_l = email.lower()
         res = await db.execute(select(User).where(User.email == email_l))
