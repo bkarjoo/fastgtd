@@ -138,6 +138,9 @@ export async function deleteNodeFromDetails() {
             
             // Navigate back to focus view
             navigateToFocus();
+            
+            // Refresh the tree to show the updated node list
+            renderTree();
         } else {
             alert('Failed to delete node');
         }
