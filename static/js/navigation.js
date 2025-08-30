@@ -185,8 +185,19 @@ function renderDetailsPage(nodeId) {
     
     // Update navigation buttons based on node type
     const navRight = container.querySelector('.nav-right');
-    if (navRight && (node.node_type === 'task' || node.node_type === 'template')) {
-        // For tasks and templates, remove smart folder and template buttons
+    if (navRight && node.node_type === 'task') {
+        // For tasks, remove smart folder and template buttons, add tag
+        navRight.innerHTML = `
+            <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+            <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+            <button onclick="quickCreateFolder()" title="Create Folder">📁</button>
+            <button onclick="quickCreateNote()" title="Create Note">📝</button>
+            <button onclick="quickCreateTask()" title="Create Task">✅</button>
+            <button onclick="showTagModal()" title="Manage Tags">🏷️</button>
+            <button onclick="logout()" title="Logout">🚪</button>
+        `;
+    } else if (navRight && node.node_type === 'template') {
+        // For templates, remove smart folder and template buttons, no tag
         navRight.innerHTML = `
             <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
             <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
@@ -204,7 +215,7 @@ function renderDetailsPage(nodeId) {
             <button onclick="logout()" title="Logout">🚪</button>
         `;
     } else if (navRight) {
-        // For other node types, show all buttons
+        // For folders and notes, show all buttons including tag
         navRight.innerHTML = `
             <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
             <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
@@ -213,6 +224,7 @@ function renderDetailsPage(nodeId) {
             <button onclick="quickCreateTask()" title="Create Task">✅</button>
             <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
             <button onclick="quickCreateTemplate()" title="Create Template">📦</button>
+            <button onclick="showTagModal()" title="Manage Tags">🏷️</button>
             <button onclick="logout()" title="Logout">🚪</button>
         `;
     }
@@ -250,6 +262,28 @@ function renderEditPage(nodeId) {
     const titleInput = container.querySelector('#nodeEditTitle');
     if (titleInput) {
         titleInput.value = node.title;
+    }
+    
+    // Update navigation based on node type
+    const navRight = container.querySelector('.nav-right');
+    if (navRight) {
+        if (node.node_type === 'task' || node.node_type === 'note' || 
+            (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder')) {
+            // For tasks, notes, and folders - add tag icon
+            navRight.innerHTML = `
+                <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="showTagModal()" title="Manage Tags">🏷️</button>
+                <button onclick="logout()" title="Logout">🚪</button>
+            `;
+        } else {
+            // For other node types (templates, smart folders), no tag icon
+            navRight.innerHTML = `
+                <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="logout()" title="Logout">🚪</button>
+            `;
+        }
     }
     
     // Render form based on node type

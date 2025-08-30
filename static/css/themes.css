@@ -14,10 +14,10 @@
 /* Dark theme colors */
 body.dark-mode {
     --bg-color: #1c1c1e;
-    --bg-secondary: #2c2c2e;
+    --bg-secondary: #1c1c1e;
     --text-color: #ffffff;
     --text-secondary: #98989d;
-    --border-color: #48484a;
+    --border-color: #38383a;
     --accent-color: #0a84ff;
 }
 
