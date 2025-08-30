@@ -158,7 +158,7 @@ export function renderTree() {
                 <button onclick="quickCreateTask()" title="Create Task">✅</button>
                 <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
                 <button onclick="quickCreateTemplate()" title="Create Template">📦</button>
-                <button onclick="showAllTags()" title="View All Tags">🏷️</button>
+                <button onclick="showSettings()" title="Settings">⚙️</button>
                 <button onclick="logout()" title="Logout">🚪</button>
             `;
         }

@@ -10,8 +10,8 @@ class DefaultNode(Base):
     """Stores the default node for each user - one row per user"""
     __tablename__ = "default_nodes"
 
-    # One row per user
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    # One row per user  
+    owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), 
         ForeignKey("users.id", ondelete="CASCADE"), 
         primary_key=True
@@ -34,8 +34,8 @@ class DefaultNode(Base):
     )
 
     # Relationships
-    user = relationship("User", back_populates="default_node")
+    owner = relationship("User", back_populates="default_node", foreign_keys=[owner_id])
     node = relationship("Node")
 
     def __repr__(self):
-        return f"<DefaultNode(user_id={self.user_id}, node_id={self.node_id})>"
+        return f"<DefaultNode(owner_id={self.owner_id}, node_id={self.node_id})>"

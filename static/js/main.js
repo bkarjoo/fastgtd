@@ -10,17 +10,17 @@ import { buildNodeURL } from './state.js?v=1756580818';
 import { login, logout } from './auth.js?v=1756580818';
 import { toggleDarkMode, backToMain } from './ui.js?v=1756580818';
 import { showSettings, editSettings, saveSettings } from './settings.js?v=1756580818';
-import { toggleExpand, handleNodeClick, handleFolderIconClick, exitFocusMode, toggleTaskComplete, createNode, deleteCurrentNode, editFocusedNodeTitle, handleFocusTitleClick } from './nodes.js?v=1756580818';
+import { toggleExpand, handleNodeClick, handleFolderIconClick, exitFocusMode, toggleTaskComplete, createNode, deleteCurrentNode, editFocusedNodeTitle, handleFocusTitleClick } from './nodes.js?v=1756586185';
 import { toggleAddForm, quickCreateFolder, quickCreateNote, quickCreateTask, quickCreateSmartFolder, quickCreateTemplate, useCurrentTemplate, instantiateTemplate, loadParentOptions, setAddType } from './creation.js?v=1756580818';
 import { openNoteView, closeNoteView, editNote, cancelNoteEdit, saveNote, deleteNoteFromView } from './notes.js?v=1756580818';
 import { initTouchDragAndDrop, handleDragStart, handleDragOver, handleDrop, handleDragEnd, handleDropOut, moveNode, moveNodeOut } from './dragdrop.js?v=1756580818';
 import { loadSmartFolderContents, refreshSmartFolderContents, refreshAllSmartFolders, loadSmartFolderContentsFocus } from './smartfolders.js?v=1756580818';
 import { toggleFloatingChat, closeFloatingChat, sendChatMessage, sendToAI, updateAIContext, handleChatKeyPress } from './chat.js?v=1756580818';
 import { initializeNavigation, navigateToFocus, navigateToDetails, navigateToEdit, navigateBack, navigateWithUnsavedCheck, saveNodeChanges, deleteNodeFromDetails } from './navigation.js?v=1756580818';
-import { showTagModal, hideTagModal, searchForTags, selectTag, createAndApplyTag, removeTag, handleTagKeydown, showAllTags, exitTagsView, createNewTag, deleteTag } from './tagging.js?v=1756582100';
+import { showTagModal, hideTagModal, searchForTags, selectTag, createAndApplyTag, removeTag, handleTagKeydown, showAllTags, exitTagsView, createNewTag, deleteTag } from './tagging.js?v=1756586185';
 
 // Import legacy code (still contains most functionality)
-import '../mobile-app.js?v=1756580818';
+import '../mobile-app.js?v=1756586185';
 
 // Global function bindings for HTML onclick handlers
 // These functions are available to all HTML onclick attributes

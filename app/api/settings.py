@@ -23,7 +23,7 @@ async def get_default_node(
     """Get the current user's default node"""
     try:
         logger.info(f"Getting default node for user {current_user.id}")
-        stmt = select(DefaultNode).where(DefaultNode.user_id == current_user.id)
+        stmt = select(DefaultNode).where(DefaultNode.owner_id == current_user.id)
         result = await db.execute(stmt)
         default_node = result.scalar_one_or_none()
         
@@ -71,7 +71,7 @@ async def set_default_node(
                 raise HTTPException(status_code=404, detail="Node not found")
         
         # Check if user already has a default node record
-        stmt = select(DefaultNode).where(DefaultNode.user_id == current_user.id)
+        stmt = select(DefaultNode).where(DefaultNode.owner_id == current_user.id)
         result = await db.execute(stmt)
         existing_default = result.scalar_one_or_none()
         logger.info(f"Existing default: {existing_default}")
@@ -85,7 +85,7 @@ async def set_default_node(
                 # Create new record
                 logger.info("Creating new default")
                 new_default = DefaultNode(
-                    user_id=current_user.id,
+                    owner_id=current_user.id,
                     node_id=node_uuid
                 )
                 db.add(new_default)

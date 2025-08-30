@@ -526,7 +526,7 @@ export async function showAllTags() {
             <div class="focus-header">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                     <div style="display: flex; align-items: center; gap: 12px;">
-                        <div onclick="exitTagsView(); event.stopPropagation();" style="cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.1);" title="Back to root">◀</div>
+                        <div onclick="exitTagsView(); event.stopPropagation();" style="cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.1);" title="Back to settings">◀</div>
                         <div style="font-size: 16px; display: flex; align-items: center;">🏷️</div>
                         <div class="focus-title" style="padding: 4px 8px;">All Tags</div>
                     </div>
@@ -565,8 +565,14 @@ export async function showAllTags() {
 
 // Exit tags view and go back to root
 export function exitTagsView() {
-    setCurrentRoot(null);
-    renderTree();
+    // Go back to settings page
+    if (window.showSettings) {
+        window.showSettings();
+    } else {
+        // Fallback to root if showSettings is not available
+        setCurrentRoot(null);
+        renderTree();
+    }
 }
 
 // Create a new tag from the tags list view
