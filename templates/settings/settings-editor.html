@@ -1,0 +1,22 @@
+<div class="note-editor-header">
+    <div onclick="showSettings(); event.stopPropagation();" style="cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.1);" title="Back to settings view">◀</div>
+    <input type="text" class="note-editor-title" value="Settings" readonly style="background: #f8f9fa; cursor: not-allowed;">
+    <button class="save-button" onclick="saveSettings()">✓</button>
+</div>
+<div class="note-content" style="padding: 20px;">
+    <div style="margin-bottom: 24px;">
+        <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #1d1d1f;">Default Node</h3>
+        <select id="defaultNodeSelect" style="
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e5e5e7;
+            border-radius: 8px;
+            background: white;
+            font-size: 16px;
+            color: #1d1d1f;
+        ">
+            <option value="">Select a default node...</option>
+        </select>
+    </div>
+    
+</div>

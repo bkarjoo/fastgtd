@@ -1,0 +1,17 @@
+<!-- Floating chat panel template (to be integrated) -->
+<div id="floatingChat" class="floating-chat">
+  <div class="chat-header">
+    <span>AI Assistant</span>
+    <button class="chat-close" onclick="closeFloatingChat()">×</button>
+  </div>
+  <div id="chatMessages" class="chat-messages"></div>
+  <div class="chat-input-container">
+    <textarea id="chatInput"
+      class="chat-input"
+      placeholder="Ask me anything..."
+      onkeypress="handleChatKeyPress(event)"
+      rows="1"></textarea>
+    <button id="chatSendBtn" class="chat-send-btn" onclick="sendChatMessage()" title="Send message">➤</button>
+  </div>
+</div>
+

@@ -1,0 +1,11 @@
+/* Temporary aggregator that preserves current styling. */
+/* We will progressively move rules into the files below. */
+
+@import url('./base.css');
+@import url('./layout.css');
+@import url('./components.css');
+@import url('./themes.css');
+
+/* Keep existing styles until migration completes */
+@import url('../mobile-styles.css');
+

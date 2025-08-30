@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>FastGTD - Unified Node Tree</title>
+    
+    <!-- iOS PWA meta tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="FastGTD">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">
+    
+    <!-- External stylesheets -->
+    <link rel="stylesheet" href="static/css/mobile.css?v=1735576230">
+    <link rel="stylesheet" href="static/css/components.css?v=1735576230">
+    
+    <!-- Markdown parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-form">
+            <h1 class="login-title">FastGTD</h1>
+            <p class="login-subtitle">Unified Node System</p>
+            <div id="authMessage"></div>
+            <input type="email" id="email" placeholder="Email" value="bkarjoo@gmail.com">
+            <input type="password" id="password" placeholder="Password">
+            <button onclick="login()" class="add-button">Sign In</button>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="hidden">
+        <!-- Header -->
+        <header class="top-nav">
+            <div class="nav-right" id="mainNavRight">
+                <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="quickCreateFolder()" title="Create Folder">📁</button>
+                <button onclick="quickCreateNote()" title="Create Note">📝</button>
+                <button onclick="quickCreateTask()" title="Create Task">✅</button>
+                <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
+                <button onclick="logout()" title="Logout">🚪</button>
+            </div>
+        </header>
+
+        <!-- Add Form -->
+        <div id="addForm" class="add-form">
+            <div class="add-type-selector">
+                <button class="type-button active" onclick="setAddType('task')" id="taskBtn">Task</button>
+                <button class="type-button" onclick="setAddType('note')" id="noteBtn">Note</button>
+                <button class="type-button" onclick="setAddType('folder')" id="folderBtn">Folder</button>
+                <button class="type-button" onclick="setAddType('smart_folder')" id="smartFolderBtn">Smart Folder</button>
+            </div>
+            <input type="text" id="nodeTitle" placeholder="Title">
+            <textarea id="noteBody" placeholder="Note content" class="hidden"></textarea>
+            
+            <!-- Smart Folder Rule Builder -->
+            <div id="smartFolderRules" class="smart-folder-rules hidden">
+                <div class="rule-section">
+                    <label>Parent Folder (Branch Root)</label>
+                    <select id="parentSelect">
+                        <option value="">All folders</option>
+                    </select>
+                </div>
+                
+                <div class="rule-section">
+                    <label>
+                        <input type="checkbox" id="taskFilter" onchange="toggleTaskSection()"> 
+                        Search Tasks
+                    </label>
+                    <div id="taskSection" class="hidden">
+                        <label>Task Status</label>
+                        <select id="taskStatus" multiple>
+                            <option value="todo">Todo</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="done">Done</option>
+                            <option value="dropped">Dropped</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="rule-section">
+                    <label>Tag Filter</label>
+                    <input type="text" id="tagSearch" placeholder="Search tags..." oninput="searchTags(this.value)">
+                    <div id="tagResults" class="tag-results"></div>
+                    <div id="selectedTags" class="selected-tags"></div>
+                </div>
+            </div>
+            
+            <button onclick="createNode()" class="add-button">Create</button>
+            <button onclick="toggleAddForm()" style="background: #86868b;">Cancel</button>
+        </div>
+
+        <!-- Content -->
+        <main class="app-layout">
+            <div id="nodeTree" class="node-tree">
+                <div style="text-align: center; padding: 40px 20px; color: #86868b;">
+                    Loading nodes...
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Note View (hidden by default) -->
+    <div id="noteView" class="note-view hidden">
+        <!-- Top Navigation -->
+        <header class="top-nav">
+            <div class="nav-right">
+                <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="logout()" title="Logout">🚪</button>
+            </div>
+        </header>
+        
+        <div class="note-header">
+            <div onclick="closeNoteView(); event.stopPropagation();" style="cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.1);" title="Back to tree view">◀</div>
+            <div class="note-title" id="noteViewTitle">Note Title</div>
+            <button class="edit-button" onclick="editNote()">✎</button>
+        </div>
+        <div class="note-content" id="noteViewContent">
+            Loading...
+        </div>
+    </div>
+
+    <!-- Note Editor (hidden by default) -->
+    <div id="noteEditor" class="note-editor hidden">
+        <!-- Top Navigation -->
+        <header class="top-nav">
+            <div class="nav-right">
+                <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="logout()" title="Logout">🚪</button>
+            </div>
+        </header>
+        
+        <div class="note-editor-header">
+            <div onclick="cancelNoteEdit(); event.stopPropagation();" style="cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.1);" title="Back to note view">◀</div>
+            <input type="text" class="note-editor-title" id="noteEditorTitle" placeholder="Note title">
+            <button class="save-button" onclick="saveNote()">✓</button>
+        </div>
+        <textarea class="note-editor-body" id="noteEditorBody" placeholder="Write your note in Markdown..."></textarea>
+    </div>
+
+    <!-- Smart Folder Rules View (hidden by default) -->
+    <div id="smartFolderRulesView" class="note-view hidden">
+        <header class="header">
+            <div class="nav-left">
+                <span id="smartFolderRulesViewBreadcrumb">FastGTD</span>
+            </div>
+            <div class="nav-right">
+                <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="logout()" title="Logout">🚪</button>
+            </div>
+        </header>
+        
+        <div class="note-header">
+            <div onclick="closeSmartFolderRulesView(); event.stopPropagation();" style="cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.1);" title="Back to tree view">◀</div>
+            <div class="note-title" id="smartFolderRulesViewTitle">Smart Folder Rules</div>
+            <button class="edit-button" onclick="editSmartFolderRules()">✎</button>
+        </div>
+        <div class="note-content" id="smartFolderRulesViewContent">
+            Loading rules...
+        </div>
+    </div>
+
+    <!-- Smart Folder Rules Editor (hidden by default) -->
+    <div id="smartFolderRulesEditor" class="note-editor hidden">
+        <header class="header">
+            <div class="nav-left">
+                <span id="smartFolderRulesEditorBreadcrumb">FastGTD</span>
+            </div>
+            <div class="nav-right">
+                <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="logout()" title="Logout">🚪</button>
+            </div>
+        </header>
+        
+        <div class="note-editor-header">
+            <div onclick="cancelSmartFolderRulesEdit(); event.stopPropagation();" style="cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.1);" title="Back to rules view">◀</div>
+            <input type="text" class="note-editor-title" id="smartFolderRulesEditorTitle" placeholder="Smart folder name">
+            <button class="save-button" onclick="saveSmartFolderRules()">✓</button>
+        </div>
+        <div class="smart-folder-rules-editor-body" id="smartFolderRulesEditorBody">
+            <!-- Rules editor interface will go here -->
+        </div>
+    </div>
+
+    <!-- Tag Modal (hidden by default) -->
+    <div id="tagModal" class="tag-modal hidden">
+        <div class="tag-modal-content">
+            <div class="tag-modal-header">
+                <h3 class="tag-modal-title">Manage Tags</h3>
+                <div style="display: flex; gap: 8px;">
+                    <button class="tag-modal-close" onclick="hideTagModal()">×</button>
+                </div>
+            </div>
+            
+            <div class="current-tags">
+                <div class="current-tags-title">Current Tags</div>
+                <div id="currentTagsList"></div>
+            </div>
+            
+            <input 
+                type="text" 
+                class="tag-search-input" 
+                id="tagSearchInput" 
+                placeholder="Search or create tags..."
+                oninput="searchTags()"
+                onkeydown="handleTagSearchKeydown(event)"
+            />
+            
+            <div class="tag-suggestions" id="tagSuggestions" style="display: none;">
+                <!-- Dynamic suggestions will be added here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Chat Widget -->
+    <div id="floatingChat" class="floating-chat">
+        <div class="chat-header">
+            <span>AI Assistant</span>
+            <button class="chat-close-btn" onclick="closeFloatingChat()" title="Close chat">✕</button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="chat-message ai">
+                <div class="chat-bubble ai">👋 Hi! I'm your FastGTD AI assistant. I'm currently being updated to work with the new unified node system and will be back online soon!</div>
+            </div>
+        </div>
+        <div class="chat-input-container">
+            <textarea 
+                id="chatInput" 
+                class="chat-input" 
+                placeholder="Ask me anything..."
+                onkeypress="handleChatKeyPress(event)"
+                rows="1"
+            ></textarea>
+            <button id="chatSendBtn" class="chat-send-btn" onclick="sendChatMessage()" title="Send message">➤</button>
+        </div>
+    </div>
+
+    <!-- Template System -->
+    <script src="static/js/templates.js?v=1735576231"></script>
+    
+    <!-- External JavaScript -->
+    <script type="module" src="static/js/main.js?v=1735576231"></script>
+    
+    
+</body>
+</html>

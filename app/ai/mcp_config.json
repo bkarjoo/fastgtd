@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "datetime": {
+      "command": "uvx",
+      "args": ["mcp-datetime"]
+    },
+    "fastgtd": {
+      "command": "python3",
+      "args": ["/home/bkarjoo/dev/fastgtd/app/ai/fastgtd_mcp_server.py"],
+      "sendAuth": true,
+      "sendCurrentNode": true
+    }
+  }
+}

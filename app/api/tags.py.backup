@@ -1,0 +1,352 @@
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import select, distinct, func
+from sqlalchemy.ext.asyncio import AsyncSession
+import uuid
+from typing import List, Optional
+
+from app.db.deps import get_db
+from sqlalchemy.exc import IntegrityError
+from app.api.auth import get_current_user
+from app.models.tag import Tag
+from app.models.tag_list import TagList
+from app.models.user import User
+from app.models.associations import list_tags as list_tags_table
+from app.schemas.tag import TagCreate, TagUpdate, TagOut
+
+
+router = APIRouter(prefix="/tags", tags=["tags"])
+
+
+@router.get("/task_lists/distinct", response_model=list[TagOut])
+async def get_distinct_task_list_tags(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Step 1: Get distinct tag_ids from list_tags for the current user's lists
+    distinct_tag_ids_stmt = (
+        select(list_tags_table.c.tag_id).distinct()
+        .join(Tag, Tag.id == list_tags_table.c.tag_id) # Join with Tag to filter by owner_id
+        .where(Tag.owner_id == current_user.id)
+    )
+    distinct_tag_ids_result = await db.execute(distinct_tag_ids_stmt)
+    tag_ids = distinct_tag_ids_result.scalars().all()
+
+    if not tag_ids:
+        return [] # No distinct tags found, return empty list
+
+    # Step 2: Get the full Tag objects for these distinct tag_ids
+    tags_stmt = select(Tag).where(Tag.id.in_(tag_ids))
+    tags_result = await db.execute(tags_stmt)
+    return tags_result.scalars().all()
+
+
+@router.post("", response_model=TagOut, status_code=201)
+async def create_tag(
+    payload: TagCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # ensure tag_list exists and belongs to user
+    tl_res = await db.execute(select(TagList).where(TagList.id == payload.tag_list_id, TagList.owner_id == current_user.id))
+    tl = tl_res.scalar_one_or_none()
+    if not tl:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_tag_list")
+
+    # optional pre-check for duplicate name per owner to avoid DB exceptions
+    dup_res = await db.execute(select(Tag.id).where(Tag.owner_id == current_user.id, Tag.name == payload.name))
+    if dup_res.first() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="tag_name_conflict")
+
+    # compute next sort_order in the given context (tag_list_id + parent_id)
+    sibling_parent_id = getattr(payload, 'parent_id', None)
+    max_res = await db.execute(
+        select(func.coalesce(func.max(Tag.sort_order) + 1, 0)).where(
+            Tag.tag_list_id == payload.tag_list_id,
+            Tag.parent_id.is_(sibling_parent_id) if sibling_parent_id is None else Tag.parent_id == sibling_parent_id
+        )
+    )
+    next_order = max_res.scalar_one() or 0
+    tag = Tag(
+        owner_id=current_user.id,
+        name=payload.name,
+        description=payload.description,
+        color=payload.color,
+        tag_list_id=payload.tag_list_id,
+        sort_order=payload.sort_order if payload.sort_order is not None else next_order,
+    )
+    db.add(tag)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="tag_name_conflict")
+    except Exception:
+        await db.rollback()
+        raise
+    await db.refresh(tag)
+    return tag
+
+
+@router.get("", response_model=list[TagOut])
+async def list_tags(
+    q: str | None = None,
+    tag_list_id: uuid.UUID | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    stmt = select(Tag).where(Tag.owner_id == current_user.id)
+    if tag_list_id is not None:
+        stmt = stmt.where(Tag.tag_list_id == tag_list_id)
+    if q:
+        stmt = stmt.where(Tag.name.ilike(f"%{q}%"))
+    stmt = stmt.order_by(Tag.sort_order, Tag.name).limit(limit).offset(offset)
+    res = await db.execute(stmt)
+    return res.scalars().all()
+
+
+async def _get_owned_tag_or_404(db: AsyncSession, owner_id: uuid.UUID, tag_id: uuid.UUID) -> Tag:
+    res = await db.execute(select(Tag).where(Tag.id == tag_id, Tag.owner_id == owner_id))
+    tag = res.scalar_one_or_none()
+    if not tag:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="tag_not_found")
+    return tag
+
+
+# Search endpoint must come before {tag_id} to avoid route conflicts
+@router.get("/search")
+async def search_tags(
+    q: Optional[str] = Query(None, min_length=1, description="Search query"),
+    limit: int = Query(10, le=50, description="Maximum number of results"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Search tags by name with autocomplete support"""
+    
+    query = select(Tag).where(Tag.owner_id == current_user.id)
+    
+    if q:
+        query = query.where(Tag.name.ilike(f"{q}%"))
+    
+    query = query.order_by(Tag.name).limit(limit)
+    
+    result = await db.execute(query)
+    tags = result.scalars().all()
+    
+    return [
+        {
+            "id": tag.id,
+            "name": tag.name,
+            "description": tag.description,
+            "color": tag.color
+        }
+        for tag in tags
+    ]
+
+
+@router.get("/{tag_id}", response_model=TagOut)
+async def get_tag(
+    tag_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await _get_owned_tag_or_404(db, current_user.id, tag_id)
+
+
+@router.patch("/{tag_id}", response_model=TagOut)
+async def update_tag(
+    tag_id: uuid.UUID,
+    payload: TagUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    tag = await _get_owned_tag_or_404(db, current_user.id, tag_id)
+    if payload.name is not None:
+        # pre-check duplicate name
+        dup_res = await db.execute(select(Tag.id).where(Tag.owner_id == current_user.id, Tag.name == payload.name, Tag.id != tag.id))
+        if dup_res.first() is not None:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="tag_name_conflict")
+        tag.name = payload.name
+    if payload.description is not None:
+        tag.description = payload.description
+    if payload.color is not None:
+        tag.color = payload.color
+    if payload.tag_list_id is not None:
+        # ensure tag_list exists and belongs to user
+        tl_res = await db.execute(select(TagList).where(TagList.id == payload.tag_list_id, TagList.owner_id == current_user.id))
+        tl = tl_res.scalar_one_or_none()
+        if not tl:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_tag_list")
+        tag.tag_list_id = payload.tag_list_id
+    if payload.sort_order is not None:
+        tag.sort_order = payload.sort_order
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="tag_name_conflict")
+    await db.refresh(tag)
+    return tag
+
+
+@router.delete("/{tag_id}", status_code=204)
+async def delete_tag(
+    tag_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    tag = await _get_owned_tag_or_404(db, current_user.id, tag_id)
+    await db.delete(tag)
+    await db.commit()
+    return None
+
+
+# Tag Hierarchy Management Endpoints
+
+@router.get("/{tag_id}/children", response_model=list[TagOut])
+async def get_tag_children(
+    tag_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await _get_owned_tag_or_404(db, current_user.id, tag_id)
+    res = await db.execute(
+        select(Tag).where(Tag.parent_id == tag_id).order_by(Tag.sort_order, Tag.name)
+    )
+    return res.scalars().all()
+
+
+@router.post("/{tag_id}/children", response_model=TagOut, status_code=201)
+async def create_child_tag(
+    tag_id: uuid.UUID,
+    payload: TagCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    parent_tag = await _get_owned_tag_or_404(db, current_user.id, tag_id)
+    
+    # optional pre-check for duplicate name per owner to avoid DB exceptions
+    dup_res = await db.execute(select(Tag.id).where(Tag.owner_id == current_user.id, Tag.name == payload.name))
+    if dup_res.first() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="tag_name_conflict")
+
+    # compute next sort_order for child tags
+    max_res = await db.execute(
+        select(func.coalesce(func.max(Tag.sort_order) + 1, 0)).where(
+            Tag.tag_list_id == payload.tag_list_id,
+            Tag.parent_id == tag_id
+        )
+    )
+    next_order = max_res.scalar_one() or 0
+    
+    child_tag = Tag(
+        owner_id=current_user.id,
+        parent_id=tag_id,
+        name=payload.name,
+        description=payload.description,
+        color=payload.color,
+        tag_list_id=payload.tag_list_id,
+        sort_order=payload.sort_order if payload.sort_order is not None else next_order
+    )
+    db.add(child_tag)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="tag_name_conflict")
+    except Exception:
+        await db.rollback()
+        raise
+    await db.refresh(child_tag)
+    return child_tag
+
+
+async def _check_circular_reference_tag(db: AsyncSession, tag_id: uuid.UUID, parent_id: uuid.UUID) -> None:
+    current_parent_id = parent_id
+    visited = {tag_id}
+    
+    while current_parent_id:
+        if current_parent_id in visited:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="circular_reference_detected"
+            )
+        visited.add(current_parent_id)
+        
+        res = await db.execute(select(Tag.parent_id).where(Tag.id == current_parent_id))
+        current_parent_id = res.scalar_one_or_none()
+
+
+@router.patch("/{tag_id}/parent", response_model=TagOut)
+async def update_tag_parent(
+    tag_id: uuid.UUID,
+    parent_id: uuid.UUID | None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    tag = await _get_owned_tag_or_404(db, current_user.id, tag_id)
+    
+    if parent_id:
+        await _get_owned_tag_or_404(db, current_user.id, parent_id)
+        await _check_circular_reference_tag(db, tag_id, parent_id)
+    
+    tag.parent_id = parent_id
+    await db.commit()
+    await db.refresh(tag)
+    return tag
+
+
+# Unified Node System Tag Endpoints
+@router.post("/simple", status_code=201)
+async def create_simple_tag(
+    name: str,
+    description: Optional[str] = None,
+    color: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a simple tag without tag_list association"""
+    
+    # Check if tag already exists
+    existing_query = select(Tag).where(
+        Tag.owner_id == current_user.id,
+        Tag.name == name
+    )
+    result = await db.execute(existing_query)
+    existing_tag = result.scalar_one_or_none()
+    
+    if existing_tag:
+        return {
+            "id": existing_tag.id,
+            "name": existing_tag.name,
+            "description": existing_tag.description,
+            "color": existing_tag.color,
+            "existed": True
+        }
+    
+    # Create new tag
+    try:
+        tag = Tag(
+            owner_id=current_user.id,
+            name=name,
+            description=description,
+            color=color
+        )
+        db.add(tag)
+        await db.commit()
+        await db.refresh(tag)
+        
+        return {
+            "id": tag.id,
+            "name": tag.name,
+            "description": tag.description,
+            "color": tag.color,
+            "existed": False
+        }
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Tag with this name already exists"
+        )

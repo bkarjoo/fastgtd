@@ -1,0 +1,25 @@
+/* Themes: dark mode, color schemes */
+
+/* CSS Variables for consistent theming */
+:root {
+    /* Light theme colors */
+    --bg-color: #f5f5f7;
+    --bg-secondary: white;
+    --text-color: #1d1d1f;
+    --text-secondary: #86868b;
+    --border-color: #e5e5e7;
+    --accent-color: #007aff;
+}
+
+/* Dark theme colors */
+body.dark-mode {
+    --bg-color: #1c1c1e;
+    --bg-secondary: #2c2c2e;
+    --text-color: #ffffff;
+    --text-secondary: #98989d;
+    --border-color: #48484a;
+    --accent-color: #0a84ff;
+}
+
+/* TODO: Move dark mode and theme variables from mobile-styles.css here */
+
