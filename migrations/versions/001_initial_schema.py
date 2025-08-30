@@ -35,11 +35,7 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
     
-    # Create enums
-    op.execute("CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'done', 'dropped')")
-    op.execute("CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high', 'urgent')")
-    
-    # Create nodes table
+    # Create nodes table (enums will be auto-created by SQLAlchemy)
     op.create_table('nodes',
         sa.Column('id', sa.UUID(), nullable=False),
         sa.Column('owner_id', sa.UUID(), nullable=False),

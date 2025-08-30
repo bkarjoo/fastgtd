@@ -15,8 +15,6 @@ from alembic import context
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.config import get_settings
-from app.models import Base  # ensures models are imported and metadata populated
-
 
 # This is the Alembic Config object, which provides access to the values within the .ini file in use.
 config = context.config
@@ -24,7 +22,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = Base.metadata
+# Set target_metadata to None for manual migrations
+target_metadata = None
 
 
 def get_url() -> str:
