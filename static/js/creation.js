@@ -24,13 +24,11 @@ export async function quickCreateFolder() {
     const maxSortOrder = siblings.reduce((max, node) => Math.max(max, node.sort_order || 0), 0);
     
     const nodeData = {
-        node_type: 'note',
+        node_type: 'folder',
         title: folderName.trim(),
         parent_id: parentId || null,
-        sort_order: maxSortOrder + 10,
-        note_data: {
-            body: 'Container folder'
-        }
+        sort_order: maxSortOrder + 10
+        // No additional data needed for folders
     };
     
     try {

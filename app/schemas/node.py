@@ -76,6 +76,18 @@ class NoteUpdate(NodeUpdate):
     note_data: Optional[NoteData] = None
 
 
+# Folder-specific schemas (pure organizational containers)
+class FolderCreate(NodeCreate):
+    """Schema for creating folders - pure organizational containers"""
+    node_type: Literal["folder"] = "folder"
+    # No additional data needed - folders are just containers
+
+
+class FolderUpdate(NodeUpdate):
+    """Schema for updating folders"""
+    pass  # Folders only have base node properties
+
+
 # Smart Folder-specific schemas
 class SmartFolderCondition(BaseModel):
     """Individual filter condition for smart folders"""
@@ -167,6 +179,14 @@ class NoteResponse(NodeResponse):
     model_config = ConfigDict(from_attributes=True)
 
 
+class FolderResponse(NodeResponse):
+    """Response schema for folders - pure organizational containers"""
+    node_type: Literal["folder"] = "folder"
+    # No additional data - folders are just containers
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class SmartFolderResponse(NodeResponse):
     """Response schema for smart folders"""
     node_type: Literal["smart_folder"] = "smart_folder"
@@ -184,7 +204,7 @@ class TemplateResponse(NodeResponse):
 
 
 # Union type for polymorphic responses
-NodeResponseUnion = Union[TaskResponse, NoteResponse, SmartFolderResponse, TemplateResponse]
+NodeResponseUnion = Union[TaskResponse, NoteResponse, FolderResponse, SmartFolderResponse, TemplateResponse]
 
 
 # Tree/hierarchy schemas

@@ -119,6 +119,7 @@ export function renderTree() {
             } else {
                 // For non-tasks, check if it's a folder or regular note
                 const isFolder = (currentNode.node_type === 'node') || 
+                                (currentNode.node_type === 'folder') ||
                                 (currentNode.node_type === 'note' && currentNode.note_data && currentNode.note_data.body === 'Container folder');
                 
                 if (isFolder) {
@@ -237,6 +238,7 @@ function renderNodeItem(node, level) {
         iconHtml = `<span class="folder-icon" onclick="handleFolderIconClick('${node.id}'); event.stopPropagation();" style="cursor: pointer; user-select: none;">📦</span>`;
     } else {
         const isFolder = (node.node_type === 'node') || 
+                        (node.node_type === 'folder') ||
                         (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder');
         
         if (isFolder || hasChildren) {

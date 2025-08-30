@@ -8,12 +8,13 @@ from sqlalchemy.orm import selectinload
 
 from app.db.deps import get_db
 from app.models.user import User
-from app.models.node import Node, Task, Note, SmartFolder, Template
+from app.models.node import Node, Task, Note, SmartFolder, Template, Folder
 from app.models.tag import Tag
 from app.schemas.node import (
     NodeCreate, NodeUpdate, NodeResponse, TaskCreate, TaskUpdate, TaskResponse,
-    NoteCreate, NoteUpdate, NoteResponse, SmartFolderCreate, SmartFolderUpdate, 
-    SmartFolderResponse, TemplateCreate, TemplateUpdate, TemplateResponse,
+    NoteCreate, NoteUpdate, NoteResponse, FolderCreate, FolderUpdate, FolderResponse,
+    SmartFolderCreate, SmartFolderUpdate, SmartFolderResponse, 
+    TemplateCreate, TemplateUpdate, TemplateResponse,
     NodeResponseUnion, NodeFilter, NodeTree, NodeTreeItem, 
     NodeMove, NodeReorder, create_node_response
 )
@@ -108,11 +109,11 @@ async def instantiate_template(
 # CRUD Operations
 @router.post("/", response_model=NodeResponseUnion)
 async def create_node(
-    node_data: Union[TaskCreate, NoteCreate, SmartFolderCreate, TemplateCreate],
+    node_data: Union[TaskCreate, NoteCreate, FolderCreate, SmartFolderCreate, TemplateCreate],
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> NodeResponseUnion:
-    """Create a new node (task, note, or smart folder)"""
+    """Create a new node (task, note, folder, smart folder, or template)"""
     
     # Create type-specific node directly (polymorphic)
     if node_data.node_type == "task":
@@ -141,6 +142,14 @@ async def create_node(
             title=node_data.title,
             sort_order=node_data.sort_order,
             body=note_data.body
+        )
+    elif node_data.node_type == "folder":
+        # Pure organizational container - no additional fields needed
+        node = Folder(
+            owner_id=current_user.id,
+            parent_id=node_data.parent_id,
+            title=node_data.title,
+            sort_order=node_data.sort_order
         )
     elif node_data.node_type == "smart_folder":
         smart_folder_data = node_data.smart_folder_data
@@ -200,7 +209,7 @@ async def get_node(
 @router.put("/{node_id}", response_model=NodeResponseUnion)
 async def update_node(
     node_id: UUID,
-    node_data: Union[TaskUpdate, NoteUpdate, SmartFolderUpdate, TemplateUpdate],
+    node_data: Union[TaskUpdate, NoteUpdate, FolderUpdate, SmartFolderUpdate, TemplateUpdate],
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> NodeResponseUnion:
@@ -522,6 +531,10 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
                 "usage_count": template.usage_count
             }
         )
+    
+    elif node.node_type == "folder":
+        # Pure organizational container - no additional data needed
+        return FolderResponse(**base_data)
     
     else:
         raise ValueError(f"Unknown node type: {node.node_type}")

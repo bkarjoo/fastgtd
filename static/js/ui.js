@@ -33,7 +33,7 @@ export function getNodeIcon(node) {
             if (status === 'dropped') return '🗑️';
         }
         return '☐';
-    } else if (node.node_type === 'node') {
+    } else if (node.node_type === 'node' || node.node_type === 'folder') {
         return '📁';
     } else if (node.node_type === 'note') {
         const isFolder = node.note_data && node.note_data.body === 'Container folder';

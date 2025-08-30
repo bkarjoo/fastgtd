@@ -267,7 +267,7 @@ function renderEditPage(nodeId) {
     // Update navigation based on node type
     const navRight = container.querySelector('.nav-right');
     if (navRight) {
-        if (node.node_type === 'task' || node.node_type === 'note' || 
+        if (node.node_type === 'task' || node.node_type === 'note' || node.node_type === 'folder' ||
             (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder')) {
             // For tasks, notes, and folders - add tag icon
             navRight.innerHTML = `
@@ -383,12 +383,14 @@ function createEditPageContainer() {
 
 // Get display-friendly node type
 function getDisplayNodeType(node) {
-    if (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder') {
+    if (node.node_type === 'folder' || node.node_type === 'node' || 
+        (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder')) {
         return 'Folder';
     }
     
     switch (node.node_type) {
         case 'node': return 'Folder';
+        case 'folder': return 'Folder';
         case 'task': return 'Task';
         case 'note': return 'Note';
         case 'smart_folder': return 'Smart Folder';
@@ -404,6 +406,7 @@ function renderNodeDetailsContent(node) {
     
     // Check if this is a folder (either pure node or legacy container)
     const isFolder = (node.node_type === 'node') || 
+                    (node.node_type === 'folder') ||
                     (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder');
     
     // For tasks, render task details first (without Basic Information)
@@ -459,6 +462,7 @@ function renderNodeEditForm(node) {
     
     // Check if this is a folder (either pure node or legacy container)
     const isFolder = (node.node_type === 'node') || 
+                    (node.node_type === 'folder') ||
                     (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder');
     
     if (isFolder) {
@@ -767,6 +771,7 @@ function buildParentOptions(currentNode) {
         
         // Include all folder types: pure nodes and legacy container folders
         return node.node_type === 'node' || 
+               node.node_type === 'folder' ||
                (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder');
     });
     
@@ -850,6 +855,7 @@ export async function saveNodeChanges() {
     
     // Check if this is a folder (either pure node or legacy container)
     const isFolder = (node.node_type === 'node') || 
+                    (node.node_type === 'folder') ||
                     (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder');
     
     if (isFolder) {

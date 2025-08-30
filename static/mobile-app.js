@@ -905,7 +905,8 @@
             const folders = Object.values(nodes).filter(node => 
                 node.node_type !== 'template' && // Exclude templates
                 node.node_type !== 'smart_folder' && // Exclude smart folders
-                (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder')
+                (node.node_type === 'folder' || node.node_type === 'node' ||
+                 (node.node_type === 'note' && node.note_data && node.note_data.body === 'Container folder'))
             );
             
             // Sort folders by title

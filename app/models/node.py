@@ -116,6 +116,18 @@ class Template(Node):
         return f"<Template(id={self.id}, title='{self.title}', category='{self.category}')>"
 
 
+class Folder(Node):
+    """Folder node - pure organizational container
+    
+    Folders don't have any additional fields beyond the base Node.
+    They exist purely for organization and hierarchy.
+    """
+    __mapper_args__ = {"polymorphic_identity": "folder"}
+    
+    def __repr__(self):
+        return f"<Folder(id={self.id}, title='{self.title}')>"
+
+
 # Useful indexes
 Index("ix_node_owner_sort", Node.owner_id, Node.sort_order)
 Index("ix_node_parent", Node.parent_id)
