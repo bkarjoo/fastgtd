@@ -64,6 +64,40 @@ export function renderTree() {
     if (currentRoot) {
         const currentNode = nodes[currentRoot];
         if (currentNode) {
+            // Update main navigation based on node type
+            const mainNavRight = document.getElementById('mainNavRight');
+            if (mainNavRight) {
+                if (currentNode.node_type === 'template') {
+                    // For templates, hide smart folder and template buttons
+                    mainNavRight.innerHTML = `
+                        <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                        <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                        <button onclick="quickCreateFolder()" title="Create Folder">📁</button>
+                        <button onclick="quickCreateNote()" title="Create Note">📝</button>
+                        <button onclick="quickCreateTask()" title="Create Task">✅</button>
+                        <button onclick="logout()" title="Logout">🚪</button>
+                    `;
+                } else if (currentNode.node_type === 'smart_folder') {
+                    // For smart folders, hide all creation buttons
+                    mainNavRight.innerHTML = `
+                        <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                        <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                        <button onclick="quickCreateTemplate()" title="Create Template">📦</button>
+                        <button onclick="logout()" title="Logout">🚪</button>
+                    `;
+                } else {
+                    // For other node types, show all buttons
+                    mainNavRight.innerHTML = `
+                        <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                        <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                        <button onclick="quickCreateFolder()" title="Create Folder">📁</button>
+                        <button onclick="quickCreateNote()" title="Create Note">📝</button>
+                        <button onclick="quickCreateTask()" title="Create Task">✅</button>
+                        <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
+                        <button onclick="logout()" title="Logout">🚪</button>
+                    `;
+                }
+            }
             // Get appropriate icon/checkbox for current node
             let iconHtml;
             const isTask = currentNode.node_type === 'task';
@@ -109,6 +143,20 @@ export function renderTree() {
                         </div>
                     </div>
                 </div>
+            `;
+        }
+    } else {
+        // Not in focus mode or current node doesn't exist - restore full navigation
+        const mainNavRight = document.getElementById('mainNavRight');
+        if (mainNavRight) {
+            mainNavRight.innerHTML = `
+                <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+                <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+                <button onclick="quickCreateFolder()" title="Create Folder">📁</button>
+                <button onclick="quickCreateNote()" title="Create Note">📝</button>
+                <button onclick="quickCreateTask()" title="Create Task">✅</button>
+                <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
+                <button onclick="logout()" title="Logout">🚪</button>
             `;
         }
     }

@@ -183,6 +183,40 @@ function renderDetailsPage(nodeId) {
         editButton.setAttribute('onclick', `navigateToEdit('${nodeId}')`);
     }
     
+    // Update navigation buttons based on node type
+    const navRight = container.querySelector('.nav-right');
+    if (navRight && (node.node_type === 'task' || node.node_type === 'template')) {
+        // For tasks and templates, remove smart folder and template buttons
+        navRight.innerHTML = `
+            <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+            <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+            <button onclick="quickCreateFolder()" title="Create Folder">📁</button>
+            <button onclick="quickCreateNote()" title="Create Note">📝</button>
+            <button onclick="quickCreateTask()" title="Create Task">✅</button>
+            <button onclick="logout()" title="Logout">🚪</button>
+        `;
+    } else if (navRight && node.node_type === 'smart_folder') {
+        // For smart folders, only show template button
+        navRight.innerHTML = `
+            <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+            <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+            <button onclick="quickCreateTemplate()" title="Create Template">📦</button>
+            <button onclick="logout()" title="Logout">🚪</button>
+        `;
+    } else if (navRight) {
+        // For other node types, show all buttons
+        navRight.innerHTML = `
+            <button onclick="toggleFloatingChat()" title="Ask AI Assistant">🤖</button>
+            <button onclick="toggleDarkMode()" title="Toggle Dark Mode">🌙</button>
+            <button onclick="quickCreateFolder()" title="Create Folder">📁</button>
+            <button onclick="quickCreateNote()" title="Create Note">📝</button>
+            <button onclick="quickCreateTask()" title="Create Task">✅</button>
+            <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
+            <button onclick="quickCreateTemplate()" title="Create Template">📦</button>
+            <button onclick="logout()" title="Logout">🚪</button>
+        `;
+    }
+    
     // Render content based on node type
     contentArea.innerHTML = renderNodeDetailsContent(node);
 }
@@ -267,6 +301,7 @@ function createDetailsPageContainer() {
                 <button onclick="quickCreateNote()" title="Create Note">📝</button>
                 <button onclick="quickCreateTask()" title="Create Task">✅</button>
                 <button onclick="quickCreateSmartFolder()" title="Create Smart Folder">💎</button>
+                <button onclick="quickCreateTemplate()" title="Create Template">📦</button>
                 <button onclick="logout()" title="Logout">🚪</button>
             </div>
         </header>
