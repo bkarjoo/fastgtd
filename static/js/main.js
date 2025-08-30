@@ -3,6 +3,8 @@
 
 // Import URL safety module first (patches fetch globally)
 import './url-safety.js?v=1735576231';
+// Import utility functions for debugging
+import { buildNodeURL } from './state.js?v=1735576231';
 
 // Import extracted modules
 import { login, logout } from './auth.js?v=1735576231';
@@ -96,6 +98,9 @@ window.navigateBack = navigateBack;
 window.navigateWithUnsavedCheck = navigateWithUnsavedCheck;
 window.saveNodeChanges = saveNodeChanges;
 window.deleteNodeFromDetails = deleteNodeFromDetails;
+
+// Debug utilities
+window.buildNodeURL = buildNodeURL;
 
 // Initialize navigation system after DOM loads
 document.addEventListener('DOMContentLoaded', () => {
