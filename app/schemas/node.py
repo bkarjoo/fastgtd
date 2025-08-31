@@ -109,7 +109,8 @@ class SmartFolderRules(BaseModel):
 
 class SmartFolderData(BaseModel):
     """Smart folder-specific data"""
-    rules: Optional[dict] = None  # Raw dict for JSON storage, can contain SmartFolderRules structure
+    rule_id: Optional[UUID] = None  # Reference to the rule this smart folder uses
+    rules: Optional[dict] = None  # DEPRECATED - Raw dict for JSON storage, kept for backward compatibility
     auto_refresh: Optional[bool] = None
     description: Optional[str] = None
 

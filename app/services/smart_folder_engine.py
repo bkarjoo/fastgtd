@@ -19,9 +19,30 @@ class SmartFolderRulesEngine:
     
     async def evaluate_smart_folder(self, smart_folder: SmartFolder, owner_id: UUID) -> List[Node]:
         """Evaluate a smart folder's rules and return matching nodes"""
-        rules = smart_folder.rules
-        if not rules or not rules.get("conditions"):
-            return []
+        # Check if using new rule_id approach
+        if smart_folder.rule_id:
+            # Fetch the rule
+            from app.models.rule import Rule
+            rule_query = select(Rule).where(
+                Rule.id == smart_folder.rule_id,
+                or_(
+                    Rule.owner_id == owner_id,
+                    Rule.is_public == True,
+                    Rule.is_system == True
+                )
+            )
+            result = await self.session.execute(rule_query)
+            rule = result.scalar_one_or_none()
+            
+            if not rule or not rule.rule_data:
+                return []
+            
+            rules = rule.rule_data
+        else:
+            # Fall back to legacy inline rules
+            rules = smart_folder.rules
+            if not rules or not rules.get("conditions"):
+                return []
         
         # Build the base query
         query = select(Node).where(
@@ -222,12 +243,21 @@ class SmartFolderRulesEngine:
     async def _build_saved_filter(self, operator: str, values: List[str], owner_id: UUID):
         """Build filter for saved filter (rule reference) conditions"""
         if not values or not values[0]:
-            return None
+            # No rule ID provided - filter out everything
+            return False
             
         rule_id = values[0]
         
         # Import here to avoid circular imports
         from app.models.rule import Rule
+        
+        try:
+            # Validate the rule_id is a valid UUID
+            from uuid import UUID as validate_uuid
+            validate_uuid(rule_id)
+        except (ValueError, AttributeError):
+            # Invalid UUID - filter out everything
+            return False
         
         # Get the referenced rule
         rule_query = select(Rule).where(
@@ -243,7 +273,9 @@ class SmartFolderRulesEngine:
         rule = result.scalar_one_or_none()
         
         if not rule or not rule.rule_data:
-            return None
+            # Rule not found or has no data - filter out everything
+            # This prevents showing all nodes when a rule is missing
+            return False
         
         # Recursively evaluate the referenced rule's conditions
         conditions = []

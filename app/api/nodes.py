@@ -83,12 +83,11 @@ async def instantiate_template(
         raise HTTPException(status_code=400, detail="Template has no content to instantiate")
     
     # Create a folder as the root of the instantiated template
-    root_folder = Note(
+    root_folder = Folder(
         owner_id=current_user.id,
         parent_id=parent_id,
         title=name,
-        sort_order=0,
-        body="Container folder"
+        sort_order=0
     )
     
     session.add(root_folder)
@@ -257,6 +256,29 @@ async def update_node(
             
     elif isinstance(node_data, SmartFolderUpdate) and node_data.smart_folder_data and isinstance(node, SmartFolder):
         smart_folder_data = node_data.smart_folder_data
+        
+        # Handle rule_id update (new methodology)
+        if smart_folder_data.rule_id is not None:
+            # Validate that the rule exists and is accessible
+            from app.models.rule import Rule
+            rule_query = select(Rule).where(
+                Rule.id == smart_folder_data.rule_id,
+                or_(
+                    Rule.owner_id == current_user.id,
+                    Rule.is_public == True,
+                    Rule.is_system == True
+                )
+            )
+            rule_result = await session.execute(rule_query)
+            rule = rule_result.scalar_one_or_none()
+            if not rule:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Rule {smart_folder_data.rule_id} not found or not accessible"
+                )
+            node.rule_id = smart_folder_data.rule_id
+            
+        # Handle legacy rules update (deprecated but kept for backward compatibility)
         if smart_folder_data.rules is not None:
             # Validate rules if provided
             from app.services.smart_folder_engine import SmartFolderRulesEngine
@@ -268,6 +290,7 @@ async def update_node(
                     detail=f"Invalid rules: {'; '.join(validation_errors)}"
                 )
             node.rules = smart_folder_data.rules
+            
         if smart_folder_data.auto_refresh is not None:
             node.auto_refresh = smart_folder_data.auto_refresh
         if smart_folder_data.description is not None:
@@ -530,6 +553,7 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
         return SmartFolderResponse(
             **base_data,
             smart_folder_data={
+                "rule_id": smart_folder.rule_id,
                 "rules": smart_folder.rules,
                 "auto_refresh": smart_folder.auto_refresh,
                 "description": smart_folder.description

@@ -161,7 +161,7 @@ export function navigateWithUnsavedCheck(navigateFunction, ...args) {
 }
 
 // Render the Details Page (read-only)
-export function renderDetailsPage(nodeId) {
+export async function renderDetailsPage(nodeId) {
     const node = nodes[nodeId];
     if (!node) return;
     
@@ -265,7 +265,7 @@ export function renderDetailsPage(nodeId) {
     }
     
     // Render content based on node type
-    contentArea.innerHTML = renderNodeDetailsContent(node);
+    contentArea.innerHTML = await renderNodeDetailsContent(node);
 }
 
 // Render the Edit Page (editable)
@@ -470,7 +470,7 @@ function getDisplayNodeType(node) {
 }
 
 // Render node-specific details content
-function renderNodeDetailsContent(node) {
+async function renderNodeDetailsContent(node) {
     const nodeType = node.node_type;
     let html = `<div class="node-metadata">`;
     
@@ -511,7 +511,7 @@ function renderNodeDetailsContent(node) {
                     html += renderNoteDetails(node);
                     break;
                 case 'smart_folder':
-                    html += renderSmartFolderDetails(node);
+                    html += await renderSmartFolderDetails(node);
                     break;
                 case 'template':
                     html += renderTemplateDetails(node);
@@ -661,38 +661,61 @@ function renderNoteDetails(node) {
     `;
 }
 
-function renderSmartFolderDetails(node) {
+async function renderSmartFolderDetails(node) {
     const smartFolderData = node.smart_folder_data || {};
-    const rules = smartFolderData.rules || {};
+    const ruleId = smartFolderData.rule_id;
     
     let rulesHtml = '';
-    if (rules.logic && rules.conditions) {
-        rulesHtml = `
-            <div class="rules-display">
-                <div class="rule-logic">
-                    <strong>Logic:</strong> ${rules.logic}
-                </div>
-                <div class="rule-conditions">
-                    <strong>Conditions:</strong>
-                    <ul>
-                        ${rules.conditions.map(cond => `
-                            <li>
-                                <span class="condition-type">${cond.type}</span>
-                                <span class="condition-operator">${cond.operator}</span>
-                                <span class="condition-values">${JSON.stringify(cond.values)}</span>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
-            </div>
-        `;
+    
+    if (ruleId) {
+        // Fetch the rule details
+        try {
+            const rule = await window.RulesAPI.getRule(ruleId);
+            if (rule) {
+                const ruleData = rule.rule_data || {};
+                rulesHtml = `
+                    <div class="rules-display">
+                        <div class="rule-name">
+                            <strong>Rule:</strong> ${rule.name}
+                            ${rule.description ? `<div class="rule-description">${rule.description}</div>` : ''}
+                        </div>
+                        ${ruleData.logic && ruleData.conditions ? `
+                            <div class="rule-logic">
+                                <strong>Logic:</strong> ${ruleData.logic}
+                            </div>
+                            <div class="rule-conditions">
+                                <strong>Conditions:</strong>
+                                <ul>
+                                    ${ruleData.conditions.map(cond => `
+                                        <li>
+                                            <span class="condition-type">${cond.type}</span>
+                                            <span class="condition-operator">${cond.operator}</span>
+                                            <span class="condition-values">${JSON.stringify(cond.values)}</span>
+                                        </li>
+                                    `).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        <div class="rule-meta">
+                            ${rule.is_public ? '<span class="badge">Public</span>' : ''}
+                            ${rule.is_system ? '<span class="badge">System</span>' : ''}
+                        </div>
+                    </div>
+                `;
+            } else {
+                rulesHtml = '<div class="no-rules">Rule not found</div>';
+            }
+        } catch (error) {
+            console.error('Error loading rule:', error);
+            rulesHtml = '<div class="no-rules">Error loading rule</div>';
+        }
     } else {
-        rulesHtml = '<div class="no-rules">No rules defined</div>';
+        rulesHtml = '<div class="no-rules">No rule selected</div>';
     }
     
     return `
         <div class="metadata-section">
-            <h3>Smart Folder Rules</h3>
+            <h3>Smart Folder Configuration</h3>
             ${rulesHtml}
         </div>
     `;
@@ -814,36 +837,46 @@ function renderNoteEditForm(node) {
 }
 
 function renderSmartFolderEditForm(node) {
-    const rules = node.smart_folder_data?.rules || { conditions: [], logic: "AND" };
+    const ruleId = node.smart_folder_data?.rule_id || '';
     
-    // Initialize the editor after a short delay to ensure DOM is ready
+    // Initialize the rule selector after a short delay to ensure DOM is ready
     setTimeout(() => {
-        if (typeof window.initializeSmartFolderEditor === 'function') {
-            window.initializeSmartFolderEditor(node);
+        if (ruleId && typeof window.loadRuleForSmartFolder === 'function') {
+            window.loadRuleForSmartFolder(ruleId);
         }
     }, 100);
     
     return `
         <div class="form-section">
-            <label>Smart Folder Rules:</label>
-            <div id="smartFolderRulesEditor">
-                <div class="rules-logic-section">
-                    <label for="rulesLogic">Match:</label>
-                    <select id="rulesLogic" class="rules-logic-select">
-                        <option value="AND" ${rules.logic === "AND" ? "selected" : ""}>All conditions</option>
-                        <option value="OR" ${rules.logic === "OR" ? "selected" : ""}>Any condition</option>
-                    </select>
+            <label>Smart Folder Rule:</label>
+            <div id="smartFolderRuleSelector">
+                <div class="rule-selector-container">
+                    <div class="current-rule-display">
+                        <label>Selected Rule:</label>
+                        <div id="selectedRule" class="selected-rule ${ruleId ? '' : 'no-selection'}">
+                            <span id="selectedRuleName" class="rule-name">${ruleId ? 'Loading...' : 'No rule selected'}</span>
+                            <input type="hidden" id="selectedRuleId" value="${ruleId}" />
+                        </div>
+                    </div>
+                    
+                    <div class="rule-selector-actions">
+                        <button type="button" class="select-rule-btn" onclick="selectRuleForSmartFolder()">
+                            <span class="icon">📋</span> Select Existing Rule
+                        </button>
+                        <button type="button" class="create-rule-btn" onclick="createNewRuleForSmartFolder()">
+                            <span class="icon">➕</span> Create New Rule
+                        </button>
+                    </div>
                 </div>
                 
-                <div id="conditionsList" class="conditions-list">
-                    ${rules.conditions.map((condition, index) => renderConditionEditor(condition, index)).join('')}
+                <div id="rulePreview" class="rule-preview" style="display: ${ruleId ? 'block' : 'none'}; margin-top: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px;">
+                    <h4>Rule Details:</h4>
+                    <div id="rulePreviewContent">
+                        <!-- Rule details will be loaded here -->
+                    </div>
                 </div>
                 
-                <div class="add-condition-section">
-                    <button type="button" class="add-condition-btn" onclick="addCondition()">+ Add Condition</button>
-                </div>
-                
-                <div class="preview-section">
+                <div class="preview-section" style="margin-top: 15px;">
                     <button type="button" class="preview-btn" onclick="previewSmartFolder()">Preview Results</button>
                     <div id="previewResults" class="preview-results hidden"></div>
                 </div>
@@ -1287,51 +1320,29 @@ export async function saveNodeChanges() {
                 break;
                 
             case 'smart_folder':
-                // Collect smart folder rules
-                if (typeof collectSmartFolderRules === 'function') {
-                    const rules = collectSmartFolderRules();
-                    
-                    // Check if we need to create or update a rule
-                    if (window.RulesAPI) {
-                        try {
-                            let ruleId = node.smart_folder_data?.rule_id;
-                            
-                            if (ruleId) {
-                                // Update existing rule
-                                await window.RulesAPI.updateRule(ruleId, {
-                                    name: `${updatedNode.title} Rules`,
-                                    rule_data: rules
-                                });
-                            } else {
-                                // Create new rule and link it
-                                const newRule = await window.RulesAPI.createRule({
-                                    name: `${updatedNode.title} Rules`,
-                                    description: `Auto-generated rules for ${updatedNode.title}`,
-                                    rule_data: rules,
-                                    is_public: false
-                                });
-                                ruleId = newRule.id;
-                            }
-                            
-                            updatedNode.smart_folder_data = {
-                                ...node.smart_folder_data,
-                                rule_id: ruleId,
-                                rules: rules  // Keep for backward compatibility
-                            };
-                        } catch (error) {
-                            console.error('Error managing rule:', error);
-                            // Fallback to old behavior
-                            updatedNode.smart_folder_data = {
-                                ...node.smart_folder_data,
-                                rules: rules
-                            };
+                // Get the selected rule ID
+                const selectedRuleId = document.getElementById('selectedRuleId')?.value;
+                
+                if (!selectedRuleId) {
+                    alert('Please select a rule for this smart folder');
+                    return;
+                }
+                
+                // Update smart folder data with the selected rule
+                updatedNode.smart_folder_data = {
+                    ...node.smart_folder_data,
+                    rule_id: selectedRuleId
+                };
+                
+                // For backward compatibility, also fetch and store the rule data
+                if (window.RulesAPI) {
+                    try {
+                        const rule = await window.RulesAPI.getRule(selectedRuleId);
+                        if (rule) {
+                            updatedNode.smart_folder_data.rules = rule.rule_data;
                         }
-                    } else {
-                        // Fallback if Rules API not available
-                        updatedNode.smart_folder_data = {
-                            ...node.smart_folder_data,
-                            rules: rules
-                        };
+                    } catch (error) {
+                        console.error('Error fetching rule data:', error);
                     }
                 }
                 break;
@@ -1441,7 +1452,150 @@ async function removeTagFromNode(nodeId, tagId) {
 
 window.removeTagFromNode = removeTagFromNode;
 
-// Smart Folder Rules Editor Functions
+// Smart Folder Rule Selector Functions
+window.selectRuleForSmartFolder = async function() {
+    console.log('selectRuleForSmartFolder called');
+    console.log('window.RulesAPI exists:', !!window.RulesAPI);
+    
+    if (!window.RulesAPI) {
+        alert('Rules API not available');
+        return;
+    }
+    
+    try {
+        // Load available rules
+        console.log('Loading rules...');
+        const rules = await window.RulesAPI.loadRules(true, true);
+        console.log('Rules loaded:', rules.length);
+        
+        // Create a modal to show rules
+        const modal = document.createElement('div');
+        modal.className = 'modal rule-selector-modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Select a Rule</h2>
+                    <button class="close-btn" onclick="this.closest('.modal').remove()">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="rules-list">
+                        ${rules.length === 0 ? '<p>No rules available. Create a new rule first.</p>' : ''}
+                        ${rules.map(rule => `
+                            <div class="rule-item" data-rule-id="${rule.id}" onclick="window.applySelectedRule('${rule.id}', '${rule.name.replace(/'/g, "\\'")}')">
+                                <div class="rule-name">${rule.name}</div>
+                                ${rule.description ? `<div class="rule-description">${rule.description}</div>` : ''}
+                                <div class="rule-meta">
+                                    ${rule.is_public ? '<span class="badge public">Public</span>' : ''}
+                                    ${rule.is_system ? '<span class="badge system">System</span>' : ''}
+                                    <span class="badge">Conditions: ${rule.rule_data.conditions.length}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Add styles if not already present
+        if (!document.getElementById('ruleSelectorStyles')) {
+            const style = document.createElement('style');
+            style.id = 'ruleSelectorStyles';
+            style.textContent = `
+                .rule-selector-modal .modal-content { max-width: 600px; max-height: 80vh; overflow-y: auto; }
+                .rules-list { display: flex; flex-direction: column; gap: 10px; }
+                .rule-item { padding: 12px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; transition: all 0.2s; }
+                .rule-item:hover { background: #f0f0f0; border-color: #007bff; }
+                .rule-name { font-weight: bold; margin-bottom: 5px; }
+                .rule-description { color: #666; font-size: 0.9em; margin-bottom: 5px; }
+                .rule-meta { display: flex; gap: 8px; }
+                .badge { padding: 2px 8px; border-radius: 3px; font-size: 0.85em; background: #e0e0e0; }
+                .badge.public { background: #d4edda; color: #155724; }
+                .badge.system { background: #d1ecf1; color: #0c5460; }
+            `;
+            document.head.appendChild(style);
+        }
+    } catch (error) {
+        console.error('Error loading rules:', error);
+        alert('Failed to load rules: ' + error.message);
+    }
+};
+
+window.applySelectedRule = function(ruleId, ruleName) {
+    // Update the hidden input
+    const ruleIdInput = document.getElementById('selectedRuleId');
+    if (ruleIdInput) {
+        ruleIdInput.value = ruleId;
+    }
+    
+    // Update the display
+    const ruleNameSpan = document.getElementById('selectedRuleName');
+    if (ruleNameSpan) {
+        ruleNameSpan.textContent = ruleName;
+    }
+    
+    // Update the selected rule container
+    const selectedRuleDiv = document.getElementById('selectedRule');
+    if (selectedRuleDiv) {
+        selectedRuleDiv.classList.remove('no-selection');
+    }
+    
+    // Load and show rule preview
+    window.loadRuleForSmartFolder(ruleId);
+    
+    // Close the modal
+    const modal = document.querySelector('.rule-selector-modal');
+    if (modal) modal.remove();
+};
+
+window.loadRuleForSmartFolder = async function(ruleId) {
+    if (!ruleId || !window.RulesAPI) return;
+    
+    try {
+        const rule = await window.RulesAPI.getRule(ruleId);
+        if (rule) {
+            // Update the rule name display
+            const ruleNameSpan = document.getElementById('selectedRuleName');
+            if (ruleNameSpan) {
+                ruleNameSpan.textContent = rule.name;
+            }
+            
+            // Show rule preview
+            const previewDiv = document.getElementById('rulePreview');
+            const previewContent = document.getElementById('rulePreviewContent');
+            if (previewDiv && previewContent) {
+                previewDiv.style.display = 'block';
+                previewContent.innerHTML = `
+                    <div class="rule-details">
+                        ${rule.description ? `<p class="rule-description">${rule.description}</p>` : ''}
+                        <div class="rule-logic">
+                            <strong>Logic:</strong> ${rule.rule_data.logic}
+                        </div>
+                        <div class="rule-conditions">
+                            <strong>Conditions:</strong>
+                            <ul>
+                                ${rule.rule_data.conditions.map(c => `
+                                    <li>${c.type} ${c.operator} ${JSON.stringify(c.values)}</li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading rule:', error);
+    }
+};
+
+window.createNewRuleForSmartFolder = function() {
+    // Navigate to rule creation page or open rule creation modal
+    alert('Rule creation interface to be implemented. For now, use the test rule editor page.');
+    // TODO: Implement rule creation interface
+};
+
+// Smart Folder Rules Editor Functions (Legacy - kept for backward compatibility)
 let currentSmartFolderConditions = [];
 
 window.addCondition = function() {
