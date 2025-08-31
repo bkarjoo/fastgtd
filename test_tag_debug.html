@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tag Modal Debug</title>
+</head>
+<body>
+    <h1>Tag Modal Debug Test</h1>
+    <button onclick="testTagModal()" style="padding: 10px 20px; font-size: 16px;">Open Tag Modal</button>
+    
+    <div id="output" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc; background: #f5f5f5;">
+        <h3>Console Output:</h3>
+        <pre id="console-output"></pre>
+    </div>
+
+    <script>
+        // Capture console logs
+        const originalLog = console.log;
+        const output = document.getElementById('console-output');
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            output.textContent += args.map(a => JSON.stringify(a, null, 2)).join(' ') + '\n';
+        };
+
+        async function testTagModal() {
+            console.log('Testing tag modal...');
+            
+            // Test the searchForTags function directly
+            if (window.searchForTags) {
+                console.log('searchForTags is available');
+                await window.searchForTags('');
+                console.log('Called searchForTags with empty string');
+                
+                await window.searchForTags('work');
+                console.log('Called searchForTags with "work"');
+            } else {
+                console.log('ERROR: searchForTags is not available on window');
+            }
+            
+            // Check if showTagModal is available
+            if (window.showTagModal) {
+                console.log('showTagModal is available');
+                // Don't actually call it as it needs auth
+            } else {
+                console.log('ERROR: showTagModal is not available on window');
+            }
+        }
+    </script>
+</body>
+</html>

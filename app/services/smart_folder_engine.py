@@ -85,6 +85,9 @@ class SmartFolderRulesEngine:
         elif condition_type == "earliest_start":
             return self._build_date_filter(operator, values, "earliest_start_at")
         
+        elif condition_type == "saved_filter":
+            return await self._build_saved_filter(operator, values, owner_id)
+        
         return None
     
     def _build_node_type_filter(self, operator: str, values: List[str]):
@@ -215,6 +218,49 @@ class SmartFolderRulesEngine:
                     select(Node.parent_id).where(Node.parent_id.is_not(None)).distinct()
                 )
         return None
+    
+    async def _build_saved_filter(self, operator: str, values: List[str], owner_id: UUID):
+        """Build filter for saved filter (rule reference) conditions"""
+        if not values or not values[0]:
+            return None
+            
+        rule_id = values[0]
+        
+        # Import here to avoid circular imports
+        from app.models.rule import Rule
+        
+        # Get the referenced rule
+        rule_query = select(Rule).where(
+            Rule.id == rule_id,
+            or_(
+                Rule.owner_id == owner_id,
+                Rule.is_public == True,
+                Rule.is_system == True
+            )
+        )
+        
+        result = await self.session.execute(rule_query)
+        rule = result.scalar_one_or_none()
+        
+        if not rule or not rule.rule_data:
+            return None
+        
+        # Recursively evaluate the referenced rule's conditions
+        conditions = []
+        for condition in rule.rule_data.get("conditions", []):
+            condition_filter = await self._build_condition_filter(condition, owner_id)
+            if condition_filter is not None:
+                conditions.append(condition_filter)
+        
+        if not conditions:
+            return None
+            
+        # Apply the referenced rule's logic
+        logic = rule.rule_data.get("logic", "AND")
+        if logic == "AND":
+            return and_(*conditions)
+        else:  # OR
+            return or_(*conditions)
     
     async def preview_smart_folder_results(self, rules: Dict[str, Any], owner_id: UUID, limit: int = 10) -> List[Node]:
         """Preview results for smart folder rules without creating the folder"""
@@ -353,7 +399,7 @@ class SmartFolderRulesEngine:
             valid_types = [
                 "tag_contains", "node_type", "parent_node", 
                 "task_status", "task_priority", "title_contains", "has_children",
-                "due_date", "earliest_start"
+                "due_date", "earliest_start", "saved_filter"
             ]
             if condition_type not in valid_types:
                 errors.append(f"Condition {i+1} has invalid type: {condition_type}")

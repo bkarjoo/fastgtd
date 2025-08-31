@@ -17,6 +17,7 @@ async function loadRules(includePublic = true, includeSystem = true) {
         if (includePublic) params.append('include_public', 'true');
         if (includeSystem) params.append('include_system', 'true');
         
+        const authToken = localStorage.getItem('authToken');
         const response = await fetch(`${RULES_API}/?${params}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
@@ -52,6 +53,7 @@ async function getRule(ruleId) {
     }
     
     try {
+        const authToken = localStorage.getItem('authToken');
         const response = await fetch(`${RULES_API}/${ruleId}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
@@ -76,6 +78,7 @@ async function getRule(ruleId) {
  */
 async function createRule(ruleData) {
     try {
+        const authToken = localStorage.getItem('authToken');
         const response = await fetch(`${RULES_API}/`, {
             method: 'POST',
             headers: {
@@ -104,6 +107,7 @@ async function createRule(ruleData) {
  */
 async function updateRule(ruleId, updates) {
     try {
+        const authToken = localStorage.getItem('authToken');
         const response = await fetch(`${RULES_API}/${ruleId}`, {
             method: 'PUT',
             headers: {
@@ -132,6 +136,7 @@ async function updateRule(ruleId, updates) {
  */
 async function deleteRule(ruleId) {
     try {
+        const authToken = localStorage.getItem('authToken');
         const response = await fetch(`${RULES_API}/${ruleId}`, {
             method: 'DELETE',
             headers: {
@@ -160,6 +165,7 @@ async function duplicateRule(ruleId, newName = null) {
         const params = new URLSearchParams();
         if (newName) params.append('new_name', newName);
         
+        const authToken = localStorage.getItem('authToken');
         const response = await fetch(`${RULES_API}/${ruleId}/duplicate?${params}`, {
             method: 'POST',
             headers: {
@@ -204,6 +210,7 @@ async function saveRuleFromEditor(ruleName, ruleDescription = null, isPublic = f
 async function updateSmartFolderRule(smartFolderId, ruleId) {
     try {
         // Get the current smart folder
+        const authToken = localStorage.getItem('authToken');
         const response = await fetch(`${API_BASE}/nodes/${smartFolderId}`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
@@ -227,6 +234,7 @@ async function updateSmartFolderRule(smartFolderId, ruleId) {
             }
         };
         
+        const authToken = localStorage.getItem('authToken');
         const updateResponse = await fetch(`${API_BASE}/nodes/${smartFolderId}`, {
             method: 'PUT',
             headers: {
