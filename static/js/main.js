@@ -20,6 +20,9 @@ import { initializeNavigation, navigateToFocus, navigateToDetails, navigateToEdi
 import { showTagModal, hideTagModal, searchForTags, selectTag, createAndApplyTag, removeTag, handleTagKeydown, showAllTags, exitTagsView, createNewTag, deleteTag } from './tagging.js?v=1756586185';
 import { showAllRules, exitRulesView, createNewRule, editRule, deleteRule } from './rules-management.js';
 
+// Import Rules API module
+import './rules.js?v=1756590100';
+
 // Import legacy code (still contains most functionality)
 import '../mobile-app.js?v=1756588063';
 

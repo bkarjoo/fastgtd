@@ -1290,10 +1290,49 @@ export async function saveNodeChanges() {
                 // Collect smart folder rules
                 if (typeof collectSmartFolderRules === 'function') {
                     const rules = collectSmartFolderRules();
-                    updatedNode.smart_folder_data = {
-                        ...node.smart_folder_data,
-                        rules: rules
-                    };
+                    
+                    // Check if we need to create or update a rule
+                    if (window.RulesAPI) {
+                        try {
+                            let ruleId = node.smart_folder_data?.rule_id;
+                            
+                            if (ruleId) {
+                                // Update existing rule
+                                await window.RulesAPI.updateRule(ruleId, {
+                                    name: `${updatedNode.title} Rules`,
+                                    rule_data: rules
+                                });
+                            } else {
+                                // Create new rule and link it
+                                const newRule = await window.RulesAPI.createRule({
+                                    name: `${updatedNode.title} Rules`,
+                                    description: `Auto-generated rules for ${updatedNode.title}`,
+                                    rule_data: rules,
+                                    is_public: false
+                                });
+                                ruleId = newRule.id;
+                            }
+                            
+                            updatedNode.smart_folder_data = {
+                                ...node.smart_folder_data,
+                                rule_id: ruleId,
+                                rules: rules  // Keep for backward compatibility
+                            };
+                        } catch (error) {
+                            console.error('Error managing rule:', error);
+                            // Fallback to old behavior
+                            updatedNode.smart_folder_data = {
+                                ...node.smart_folder_data,
+                                rules: rules
+                            };
+                        }
+                    } else {
+                        // Fallback if Rules API not available
+                        updatedNode.smart_folder_data = {
+                            ...node.smart_folder_data,
+                            rules: rules
+                        };
+                    }
                 }
                 break;
         }
@@ -1613,15 +1652,36 @@ function getAvailableSmartFolders() {
 }
 
 // Initialize smart folder conditions when editing
-window.initializeSmartFolderEditor = function(node) {
+window.initializeSmartFolderEditor = async function(node) {
     console.log('=== initializeSmartFolderEditor ===');
     console.log('Node:', node);
     
-    const rules = node.smart_folder_data?.rules || { conditions: [], logic: "AND" };
-    console.log('Rules from node:', JSON.stringify(rules, null, 2));
+    let rules = node.smart_folder_data?.rules || { conditions: [], logic: "AND" };
+    
+    // If the smart folder has a rule_id, load the rule from the API
+    if (node.smart_folder_data?.rule_id && window.RulesAPI) {
+        try {
+            const rule = await window.RulesAPI.getRule(node.smart_folder_data.rule_id);
+            if (rule && rule.rule_data) {
+                rules = rule.rule_data;
+                console.log('Loaded rules from Rules API:', JSON.stringify(rules, null, 2));
+            }
+        } catch (error) {
+            console.error('Error loading rule:', error);
+            // Fall back to embedded rules
+        }
+    }
+    
+    console.log('Rules to use:', JSON.stringify(rules, null, 2));
     
     currentSmartFolderConditions = [...rules.conditions];
     console.log('Current conditions after copy:', currentSmartFolderConditions);
+    
+    // Set logic selector
+    const logicSelector = document.getElementById('rulesLogic');
+    if (logicSelector) {
+        logicSelector.value = rules.logic || 'AND';
+    }
     
     // Set initial state if no conditions exist
     if (currentSmartFolderConditions.length === 0) {
