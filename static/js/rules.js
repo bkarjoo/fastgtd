@@ -234,7 +234,6 @@ async function updateSmartFolderRule(smartFolderId, ruleId) {
             }
         };
         
-        const authToken = localStorage.getItem('authToken');
         const updateResponse = await fetch(`${API_BASE}/nodes/${smartFolderId}`, {
             method: 'PUT',
             headers: {
