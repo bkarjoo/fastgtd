@@ -73,11 +73,13 @@ export async function showTagModal(nodeId) {
     // Load all available tags
     await loadAvailableTags();
     
-    // Focus on the input
+    // Focus on the input and show all available tags immediately
     const input = document.getElementById('tagInput');
     if (input) {
         input.value = '';
         input.focus();
+        // Show all available tags immediately
+        searchForTags('');
     }
 }
 
@@ -99,13 +101,11 @@ function createTagModal() {
         <div class="tag-modal-overlay" onclick="hideTagModal()"></div>
         <div class="tag-modal-content">
             <div class="tag-modal-header">
-                <h3>Manage Tags</h3>
                 <button class="tag-modal-close" onclick="hideTagModal()">×</button>
             </div>
             
             <div class="tag-modal-body">
                 <div class="current-tags-section">
-                    <h4>Current Tags</h4>
                     <div id="currentTagsList" class="tag-list">
                         <!-- Current tags will be displayed here -->
                     </div>
@@ -117,8 +117,8 @@ function createTagModal() {
                         id="tagInput" 
                         class="tag-input" 
                         placeholder="Type to search or create tags..."
-                        oninput="searchForTags(this.value)"
-                        onkeydown="handleTagKeydown(event)"
+                        oninput="window.searchForTags(this.value)"
+                        onkeydown="window.handleTagKeydown(event)"
                     />
                     <div id="tagSuggestions" class="tag-suggestions hidden">
                         <!-- Tag suggestions will appear here -->
@@ -173,21 +173,27 @@ function addTagModalStyles() {
             padding: 20px;
             width: 90%;
             max-width: 500px;
-            max-height: 80vh;
+            max-height: 90vh;
+            height: 90vh;
             overflow-y: auto;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
         }
         
         .tag-modal-header {
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-end;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
+            flex-shrink: 0;
         }
         
-        .tag-modal-header h3 {
-            margin: 0;
-            font-size: 20px;
+        .tag-modal-body {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
         
         .tag-modal-close {
@@ -204,13 +210,9 @@ function addTagModalStyles() {
         }
         
         .current-tags-section {
-            margin-bottom: 20px;
-        }
-        
-        .current-tags-section h4 {
-            margin: 0 0 10px 0;
-            font-size: 14px;
-            color: #666;
+            margin-bottom: 15px;
+            min-height: 40px;
+            flex-shrink: 0;
         }
         
         .tag-list {
@@ -243,6 +245,8 @@ function addTagModalStyles() {
         
         .tag-input-section {
             position: relative;
+            flex-shrink: 0;
+            margin-bottom: 20px;
         }
         
         .tag-input {
@@ -258,13 +262,14 @@ function addTagModalStyles() {
             top: 100%;
             left: 0;
             right: 0;
-            background: white;
-            border: 1px solid #ddd;
+            background: #fff;
+            border: 2px solid #3b82f6;
             border-radius: 8px;
             margin-top: 4px;
             max-height: 200px;
             overflow-y: auto;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            z-index: 10001;
         }
         
         .tag-suggestions.hidden {
@@ -277,7 +282,8 @@ function addTagModalStyles() {
             border-bottom: 1px solid #eee;
         }
         
-        .tag-suggestion:hover {
+        .tag-suggestion:hover,
+        .tag-suggestion.selected {
             background: #f0f0f0;
         }
         
@@ -290,26 +296,51 @@ function addTagModalStyles() {
             font-weight: 500;
         }
         
-        @media (prefers-color-scheme: dark) {
-            .tag-modal-content {
-                background: #1c1c1e;
-                color: white;
-            }
-            
-            .tag-input {
-                background: #2c2c2e;
-                border-color: #48484a;
-                color: white;
-            }
-            
-            .tag-suggestions {
-                background: #2c2c2e;
-                border-color: #48484a;
-            }
-            
-            .tag-suggestion:hover {
-                background: #3a3a3c;
-            }
+        /* Dark mode styles for tag modal */
+        body.dark-mode .tag-modal-content {
+            background: #1c1c1e;
+            color: white;
+        }
+        
+        body.dark-mode .tag-modal-close {
+            color: white;
+        }
+        
+        body.dark-mode .tag-input {
+            background: #2c2c2e;
+            border-color: #48484a;
+            color: white;
+        }
+        
+        body.dark-mode .tag-input::placeholder {
+            color: #98989f;
+        }
+        
+        body.dark-mode .tag-suggestions {
+            background: #2c2c2e;
+            border-color: #48484a;
+        }
+        
+        body.dark-mode .tag-suggestion {
+            border-bottom-color: #38383a;
+            color: white;
+        }
+        
+        body.dark-mode .tag-suggestion:hover,
+        body.dark-mode .tag-suggestion.selected {
+            background: #3a3a3c;
+        }
+        
+        body.dark-mode .tag-suggestion.create-new {
+            color: #0a84ff;
+        }
+        
+        body.dark-mode .current-tags-section h3 {
+            color: white;
+        }
+        
+        body.dark-mode .tag-input-section h3 {
+            color: white;
         }
     `;
     
@@ -377,38 +408,70 @@ function renderCurrentTags() {
         return;
     }
     
-    container.innerHTML = appliedTags.map(tag => `
-        <span class="tag-item" style="${tag.color ? `background: ${tag.color}` : ''}">
-            ${tag.name}
-            <span class="remove-tag" onclick="removeTag('${tag.id}')">×</span>
-        </span>
-    `).join('');
+    container.innerHTML = appliedTags.map(tag => {
+        const escapedId = tag.id.replace(/'/g, "\\'");
+        return `
+            <span class="tag-item" style="${tag.color ? `background: ${tag.color}` : ''}">
+                ${tag.name}
+                <span class="remove-tag" onclick="window.removeTag('${escapedId}')">×</span>
+            </span>
+        `;
+    }).join('');
 }
 
-// Search tags and show suggestions
+// Track selected suggestion index for keyboard navigation
+let selectedSuggestionIndex = -1;
+
+// Search tags and show suggestions (filters locally from cached tags)
 export async function searchForTags(query) {
-    const suggestionsContainer = document.getElementById('tagSuggestions');
-    if (!suggestionsContainer) return;
+    console.log('searchForTags called with query:', query);
+    console.log('Available tags:', availableTags);
+    console.log('Applied tags:', appliedTags);
     
-    if (!query || query.trim() === '') {
-        suggestionsContainer.classList.add('hidden');
+    const suggestionsContainer = document.getElementById('tagSuggestions');
+    if (!suggestionsContainer) {
+        console.log('No suggestions container found');
         return;
     }
     
-    // Load tags matching the query
-    await loadAvailableTags(query);
+    // Force display to block to override any conflicting styles
+    suggestionsContainer.style.display = '';
     
-    // Filter out already applied tags
+    if (!query || query.trim() === '') {
+        // Show all available tags when input is empty
+        query = '';
+    }
+    
+    const queryLower = query.toLowerCase().trim();
+    
+    // Filter tags locally from the already loaded availableTags
     const appliedTagIds = new Set(appliedTags.map(t => t.id));
-    const suggestions = availableTags.filter(tag => !appliedTagIds.has(tag.id));
+    const suggestions = availableTags.filter(tag => {
+        // Filter out already applied tags
+        if (appliedTagIds.has(tag.id)) return false;
+        // Match tags that contain the query
+        return tag.name.toLowerCase().includes(queryLower);
+    });
+    
+    // Sort suggestions - exact matches first, then alphabetical
+    suggestions.sort((a, b) => {
+        const aExact = a.name.toLowerCase() === queryLower;
+        const bExact = b.name.toLowerCase() === queryLower;
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        return a.name.localeCompare(b.name);
+    });
     
     // Build suggestions HTML
     let html = '';
     
-    // Add existing tags
-    suggestions.forEach(tag => {
+    // Add existing tags (limit to 10 for performance)
+    suggestions.slice(0, 10).forEach((tag, index) => {
+        // Escape tag name and id for safe HTML insertion
+        const escapedName = tag.name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+        const escapedId = tag.id.replace(/'/g, "\\'");
         html += `
-            <div class="tag-suggestion" onclick="selectTag('${tag.id}', '${tag.name}')">
+            <div class="tag-suggestion" data-index="${index}" onclick="window.selectTag('${escapedId}', '${escapedName}')">
                 ${tag.name}
             </div>
         `;
@@ -416,19 +479,38 @@ export async function searchForTags(query) {
     
     // Add "create new" option if query doesn't exactly match any existing tag
     const exactMatch = availableTags.some(tag => 
-        tag.name.toLowerCase() === query.toLowerCase()
+        tag.name.toLowerCase() === queryLower
     );
     
     if (!exactMatch && query.trim()) {
+        const createIndex = suggestions.length;
+        const escapedQuery = query.trim().replace(/'/g, "\\'").replace(/"/g, "&quot;");
         html += `
-            <div class="tag-suggestion create-new" onclick="createAndApplyTag('${query.trim()}')">
+            <div class="tag-suggestion create-new" data-index="${createIndex}" onclick="window.createAndApplyTag('${escapedQuery}')">
                 Create new tag: "${query.trim()}"
             </div>
         `;
     }
     
-    suggestionsContainer.innerHTML = html;
-    suggestionsContainer.classList.remove('hidden');
+    console.log('Suggestions HTML:', html);
+    console.log('Suggestions found:', suggestions.length);
+    
+    if (html) {
+        suggestionsContainer.innerHTML = html;
+        suggestionsContainer.classList.remove('hidden');
+        suggestionsContainer.style.display = 'block'; // Force display
+        selectedSuggestionIndex = -1; // Reset selection
+        console.log('Suggestions container shown');
+        console.log('Container display style:', window.getComputedStyle(suggestionsContainer).display);
+        console.log('Container visibility:', window.getComputedStyle(suggestionsContainer).visibility);
+        console.log('Container z-index:', window.getComputedStyle(suggestionsContainer).zIndex);
+        console.log('Container position:', window.getComputedStyle(suggestionsContainer).position);
+        console.log('Container dimensions:', suggestionsContainer.offsetWidth, 'x', suggestionsContainer.offsetHeight);
+    } else {
+        suggestionsContainer.classList.add('hidden');
+        suggestionsContainer.style.display = 'none';
+        console.log('No suggestions to show, hiding container');
+    }
 }
 
 // Select an existing tag
@@ -444,6 +526,7 @@ export async function selectTag(tagId, tagName) {
     const suggestions = document.getElementById('tagSuggestions');
     if (suggestions) {
         suggestions.classList.add('hidden');
+        suggestions.style.display = 'none';
     }
 }
 
@@ -524,9 +607,47 @@ export async function removeTag(tagId) {
     }
 }
 
-// Handle Enter key in tag input
+// Handle keyboard navigation in tag input
 export function handleTagKeydown(event) {
-    if (event.key === 'Enter') {
+    const suggestionsContainer = document.getElementById('tagSuggestions');
+    const suggestions = suggestionsContainer?.querySelectorAll('.tag-suggestion');
+    
+    if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (suggestions && suggestions.length > 0) {
+            // Clear previous selection
+            if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestions.length) {
+                suggestions[selectedSuggestionIndex].classList.remove('selected');
+            }
+            // Move down
+            selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, suggestions.length - 1);
+            suggestions[selectedSuggestionIndex].classList.add('selected');
+            suggestions[selectedSuggestionIndex].scrollIntoView({ block: 'nearest' });
+        }
+    } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (suggestions && suggestions.length > 0) {
+            // Clear previous selection
+            if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestions.length) {
+                suggestions[selectedSuggestionIndex].classList.remove('selected');
+            }
+            // Move up
+            selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, 0);
+            if (selectedSuggestionIndex >= 0) {
+                suggestions[selectedSuggestionIndex].classList.add('selected');
+                suggestions[selectedSuggestionIndex].scrollIntoView({ block: 'nearest' });
+            }
+        }
+    } else if (event.key === 'Enter') {
+        event.preventDefault();
+        
+        // If a suggestion is selected, click it
+        if (suggestions && selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestions.length) {
+            suggestions[selectedSuggestionIndex].click();
+            return;
+        }
+        
+        // Otherwise, check if we should create a new tag
         const input = event.target;
         const query = input.value.trim();
         
@@ -536,9 +657,9 @@ export function handleTagKeydown(event) {
                 tag.name.toLowerCase() === query.toLowerCase()
             );
             
-            if (exactMatch) {
+            if (exactMatch && !appliedTags.some(t => t.id === exactMatch.id)) {
                 selectTag(exactMatch.id, exactMatch.name);
-            } else {
+            } else if (!exactMatch) {
                 createAndApplyTag(query);
             }
         }
@@ -671,3 +792,10 @@ export async function deleteTag(tagId) {
         alert('Error deleting tag');
     }
 }
+
+// Make functions globally available for onclick handlers
+window.searchForTags = searchForTags;
+window.handleTagKeydown = handleTagKeydown;
+window.selectTag = selectTag;
+window.createAndApplyTag = createAndApplyTag;
+window.removeTag = removeTag;
