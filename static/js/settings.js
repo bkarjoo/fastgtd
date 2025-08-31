@@ -9,6 +9,8 @@ export async function showSettings() {
     // Find and clear the tree container completely
     const treeContainer = document.getElementById('nodeTree');
     if (treeContainer) {
+        // Clear template cache for settings view to ensure latest version
+        window.templateSystem.cache.delete('settings/settings-view.html');
         treeContainer.innerHTML = await window.templateSystem.loadAndRender('settings/settings-view.html', {
             defaultNodeText: 'Not set'
         });

@@ -628,12 +628,37 @@ function renderNoteDetails(node) {
 
 function renderSmartFolderDetails(node) {
     const smartFolderData = node.smart_folder_data || {};
+    const rules = smartFolderData.rules || {};
+    
+    let rulesHtml = '';
+    if (rules.logic && rules.conditions) {
+        rulesHtml = `
+            <div class="rules-display">
+                <div class="rule-logic">
+                    <strong>Logic:</strong> ${rules.logic}
+                </div>
+                <div class="rule-conditions">
+                    <strong>Conditions:</strong>
+                    <ul>
+                        ${rules.conditions.map(cond => `
+                            <li>
+                                <span class="condition-type">${cond.type}</span>
+                                <span class="condition-operator">${cond.operator}</span>
+                                <span class="condition-values">${JSON.stringify(cond.values)}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+        `;
+    } else {
+        rulesHtml = '<div class="no-rules">No rules defined</div>';
+    }
+    
     return `
         <div class="metadata-section">
             <h3>Smart Folder Rules</h3>
-            <div class="rules-preview">
-                ${JSON.stringify(smartFolderData.conditions || [], null, 2)}
-            </div>
+            ${rulesHtml}
         </div>
     `;
 }
@@ -754,14 +779,228 @@ function renderNoteEditForm(node) {
 }
 
 function renderSmartFolderEditForm(node) {
+    const rules = node.smart_folder_data?.rules || { conditions: [], logic: "AND" };
+    
+    // Initialize the editor after a short delay to ensure DOM is ready
+    setTimeout(() => {
+        if (typeof window.initializeSmartFolderEditor === 'function') {
+            window.initializeSmartFolderEditor(node);
+        }
+    }, 100);
+    
     return `
         <div class="form-section">
             <label>Smart Folder Rules:</label>
             <div id="smartFolderRulesEditor">
-                <em>Smart folder rules editor to be implemented</em>
+                <div class="rules-logic-section">
+                    <label for="rulesLogic">Match:</label>
+                    <select id="rulesLogic" class="rules-logic-select">
+                        <option value="AND" ${rules.logic === "AND" ? "selected" : ""}>All conditions</option>
+                        <option value="OR" ${rules.logic === "OR" ? "selected" : ""}>Any condition</option>
+                    </select>
+                </div>
+                
+                <div id="conditionsList" class="conditions-list">
+                    ${rules.conditions.map((condition, index) => renderConditionEditor(condition, index)).join('')}
+                </div>
+                
+                <div class="add-condition-section">
+                    <button type="button" class="add-condition-btn" onclick="addCondition()">+ Add Condition</button>
+                </div>
+                
+                <div class="preview-section">
+                    <button type="button" class="preview-btn" onclick="previewSmartFolder()">Preview Results</button>
+                    <div id="previewResults" class="preview-results hidden"></div>
+                </div>
             </div>
         </div>
     `;
+}
+
+function renderConditionEditor(condition, index) {
+    const conditionTypes = [
+        { value: "node_type", label: "Node Type" },
+        { value: "task_status", label: "Task Status" },
+        { value: "task_priority", label: "Task Priority" },
+        { value: "due_date", label: "Due Date" },
+        { value: "earliest_start", label: "Earliest Start Date" },
+        { value: "tag_contains", label: "Has Tags" },
+        { value: "title_contains", label: "Title Contains" },
+        { value: "parent_node", label: "Parent Node" }
+    ];
+    
+    const operators = getOperatorsForConditionType(condition.type || "node_type");
+    
+    return `
+        <div class="condition-editor" data-condition-index="${index}">
+            <div class="condition-header">
+                <select class="condition-type-select" onchange="onConditionTypeChange(${index}, this.value)">
+                    ${conditionTypes.map(type => `
+                        <option value="${type.value}" ${condition.type === type.value ? "selected" : ""}>
+                            ${type.label}
+                        </option>
+                    `).join('')}
+                </select>
+                
+                <select class="condition-operator-select">
+                    ${operators.map(op => `
+                        <option value="${op.value}" ${condition.operator === op.value ? "selected" : ""}>
+                            ${op.label}
+                        </option>
+                    `).join('')}
+                </select>
+                
+                <button type="button" class="remove-condition-btn" onclick="removeCondition(${index})">×</button>
+            </div>
+            
+            <div class="condition-values">
+                ${renderConditionValues(condition, index)}
+            </div>
+        </div>
+    `;
+}
+
+function renderConditionValues(condition, index) {
+    const conditionType = condition.type || "node_type";
+    const values = condition.values || [];
+    
+    switch (conditionType) {
+        case "node_type":
+            const nodeTypes = ["task", "note", "folder", "smart_folder"];
+            return `
+                <div class="checkbox-group">
+                    ${nodeTypes.map(type => `
+                        <label class="checkbox-label">
+                            <input type="checkbox" value="${type}" 
+                                ${values.includes(type) ? "checked" : ""}>
+                            ${type.charAt(0).toUpperCase() + type.slice(1)}
+                        </label>
+                    `).join('')}
+                </div>
+            `;
+            
+        case "task_status":
+            const statuses = ["todo", "in_progress", "done", "dropped"];
+            return `
+                <div class="checkbox-group">
+                    ${statuses.map(status => `
+                        <label class="checkbox-label">
+                            <input type="checkbox" value="${status}" 
+                                ${values.includes(status) ? "checked" : ""}>
+                            ${status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </label>
+                    `).join('')}
+                </div>
+            `;
+            
+        case "task_priority":
+            const priorities = ["low", "medium", "high", "urgent"];
+            return `
+                <div class="checkbox-group">
+                    ${priorities.map(priority => `
+                        <label class="checkbox-label">
+                            <input type="checkbox" value="${priority}" 
+                                ${values.includes(priority) ? "checked" : ""}>
+                            ${priority.charAt(0).toUpperCase() + priority.slice(1)}
+                        </label>
+                    `).join('')}
+                </div>
+            `;
+            
+        case "due_date":
+        case "earliest_start":
+            return `
+                <div class="date-inputs">
+                    <input type="date" class="date-input" value="${values[0] || ''}" 
+                        placeholder="Select date">
+                    ${condition.operator === "between" ? `
+                        <span class="date-separator">to</span>
+                        <input type="date" class="date-input" value="${values[1] || ''}" 
+                            placeholder="End date">
+                    ` : ''}
+                </div>
+            `;
+            
+        case "title_contains":
+            return `
+                <input type="text" class="text-input" value="${values[0] || ''}" 
+                    placeholder="Enter text to search for">
+            `;
+            
+        case "tag_contains":
+            return `
+                <div class="tag-selector">
+                    <input type="text" class="tag-search-input" placeholder="Start typing to search tags..."
+                        onkeyup="searchTagsForCondition(${index}, this.value)">
+                    <div class="selected-tags" id="selectedTags${index}">
+                        ${(values || []).map(tagId => renderSelectedTag(tagId, index)).join('')}
+                    </div>
+                    <div class="tag-suggestions hidden" id="tagSuggestions${index}"></div>
+                </div>
+            `;
+            
+        case "parent_node":
+            return `
+                <div class="node-selector">
+                    <input type="text" class="node-search-input" placeholder="Start typing to search nodes..."
+                        onkeyup="searchNodesForCondition(${index}, this.value)">
+                    <div class="selected-nodes" id="selectedNodes${index}">
+                        ${(values || []).map(nodeId => renderSelectedNode(nodeId, index)).join('')}
+                    </div>
+                    <div class="node-suggestions hidden" id="nodeSuggestions${index}"></div>
+                </div>
+            `;
+            
+        default:
+            return `<input type="text" class="text-input" value="${values[0] || ''}" placeholder="Enter value">`;
+    }
+}
+
+function getOperatorsForConditionType(conditionType) {
+    switch (conditionType) {
+        case "node_type":
+        case "task_status":
+        case "task_priority":
+        case "tag_contains":
+            return [
+                { value: "in", label: "is any of" },
+                { value: "not_in", label: "is not any of" }
+            ];
+            
+        case "due_date":
+        case "earliest_start":
+            return [
+                { value: "before", label: "before" },
+                { value: "after", label: "after" },
+                { value: "on", label: "on" },
+                { value: "between", label: "between" },
+                { value: "is_null", label: "is not set" },
+                { value: "is_not_null", label: "is set" }
+            ];
+            
+        case "title_contains":
+            return [
+                { value: "contains", label: "contains" },
+                { value: "not_contains", label: "does not contain" },
+                { value: "equals", label: "equals" },
+                { value: "starts_with", label: "starts with" },
+                { value: "ends_with", label: "ends with" }
+            ];
+            
+        case "parent_node":
+            return [
+                { value: "equals", label: "is" },
+                { value: "in", label: "is any of" },
+                { value: "not_equals", label: "is not" },
+                { value: "not_in", label: "is not any of" }
+            ];
+            
+        default:
+            return [
+                { value: "equals", label: "equals" },
+                { value: "contains", label: "contains" }
+            ];
+    }
 }
 
 function renderTemplateEditForm(node) {
@@ -869,6 +1108,15 @@ function hasUnsavedChanges() {
             const noteData = node.note_data || {};
             return noteBody && noteBody.value !== (noteData.body || '');
             
+        case 'smart_folder':
+            // Check if smart folder rules have changed
+            if (typeof collectSmartFolderRules === 'function') {
+                const currentRules = collectSmartFolderRules();
+                const originalRules = node.smart_folder_data?.rules || { conditions: [], logic: "AND" };
+                return JSON.stringify(currentRules) !== JSON.stringify(originalRules);
+            }
+            return false;
+            
         default:
             return false;
     }
@@ -962,6 +1210,17 @@ export async function saveNodeChanges() {
                     ...node.note_data,
                     body: noteBody ? noteBody.value : node.note_data?.body
                 };
+                break;
+                
+            case 'smart_folder':
+                // Collect smart folder rules
+                if (typeof collectSmartFolderRules === 'function') {
+                    const rules = collectSmartFolderRules();
+                    updatedNode.smart_folder_data = {
+                        ...node.smart_folder_data,
+                        rules: rules
+                    };
+                }
                 break;
         }
     }
@@ -1068,6 +1327,182 @@ async function removeTagFromNode(nodeId, tagId) {
 }
 
 window.removeTagFromNode = removeTagFromNode;
+
+// Smart Folder Rules Editor Functions
+let currentSmartFolderConditions = [];
+
+window.addCondition = function() {
+    const newCondition = {
+        type: "node_type",
+        operator: "in",
+        values: []
+    };
+    
+    currentSmartFolderConditions.push(newCondition);
+    refreshConditionsList();
+};
+
+window.removeCondition = function(index) {
+    currentSmartFolderConditions.splice(index, 1);
+    refreshConditionsList();
+};
+
+window.onConditionTypeChange = function(index, newType) {
+    if (currentSmartFolderConditions[index]) {
+        currentSmartFolderConditions[index].type = newType;
+        currentSmartFolderConditions[index].operator = getOperatorsForConditionType(newType)[0].value;
+        currentSmartFolderConditions[index].values = [];
+        refreshConditionsList();
+    }
+};
+
+function refreshConditionsList() {
+    const conditionsList = document.getElementById('conditionsList');
+    if (conditionsList) {
+        conditionsList.innerHTML = currentSmartFolderConditions
+            .map((condition, index) => renderConditionEditor(condition, index))
+            .join('');
+    }
+}
+
+window.previewSmartFolder = function() {
+    const rules = collectSmartFolderRules();
+    console.log('Preview rules:', rules);
+    
+    // TODO: Call API to preview results
+    const previewResults = document.getElementById('previewResults');
+    if (previewResults) {
+        previewResults.innerHTML = '<div class="loading">Loading preview...</div>';
+        previewResults.classList.remove('hidden');
+        
+        // Call the preview API
+        fetch(`${API_BASE}/nodes/smart_folder/preview`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify(rules)
+        })
+        .then(response => response.json())
+        .then(results => {
+            if (results.length === 0) {
+                previewResults.innerHTML = '<div class="preview-empty">No results found</div>';
+            } else {
+                previewResults.innerHTML = `
+                    <div class="preview-header">${results.length} result(s) found:</div>
+                    <div class="preview-items">
+                        ${results.slice(0, 5).map(node => `
+                            <div class="preview-item">
+                                <span class="preview-icon">${getNodeIcon(node.node_type)}</span>
+                                <span class="preview-title">${node.title}</span>
+                                <span class="preview-type">${node.node_type}</span>
+                            </div>
+                        `).join('')}
+                        ${results.length > 5 ? `<div class="preview-more">... and ${results.length - 5} more</div>` : ''}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Preview error:', error);
+            previewResults.innerHTML = '<div class="preview-error">Error loading preview</div>';
+        });
+    }
+};
+
+window.collectSmartFolderRules = function() {
+    const logic = document.getElementById('rulesLogic')?.value || 'AND';
+    const conditions = [];
+    
+    document.querySelectorAll('.condition-editor').forEach((conditionEl, index) => {
+        const condition = currentSmartFolderConditions[index];
+        if (!condition) return;
+        
+        const typeSelect = conditionEl.querySelector('.condition-type-select');
+        const operatorSelect = conditionEl.querySelector('.condition-operator-select');
+        
+        const collectedCondition = {
+            type: typeSelect.value,
+            operator: operatorSelect.value,
+            values: collectConditionValues(conditionEl, typeSelect.value)
+        };
+        
+        if (collectedCondition.values.length > 0 || ['is_null', 'is_not_null'].includes(collectedCondition.operator)) {
+            conditions.push(collectedCondition);
+        }
+    });
+    
+    return { conditions, logic };
+}
+
+function collectConditionValues(conditionEl, conditionType) {
+    switch (conditionType) {
+        case "node_type":
+        case "task_status":
+        case "task_priority":
+            return Array.from(conditionEl.querySelectorAll('.checkbox-group input:checked'))
+                .map(input => input.value);
+                
+        case "due_date":
+        case "earliest_start":
+            const dateInputs = conditionEl.querySelectorAll('.date-input');
+            return Array.from(dateInputs)
+                .map(input => input.value)
+                .filter(value => value);
+                
+        case "title_contains":
+            const textInput = conditionEl.querySelector('.text-input');
+            return textInput && textInput.value ? [textInput.value] : [];
+            
+        case "tag_contains":
+            return Array.from(conditionEl.querySelectorAll('.selected-tags .selected-tag'))
+                .map(tag => tag.getAttribute('data-tag-id'))
+                .filter(id => id);
+                
+        case "parent_node":
+            return Array.from(conditionEl.querySelectorAll('.selected-nodes .selected-node'))
+                .map(node => node.getAttribute('data-node-id'))
+                .filter(id => id);
+                
+        default:
+            const defaultInput = conditionEl.querySelector('.text-input');
+            return defaultInput && defaultInput.value ? [defaultInput.value] : [];
+    }
+}
+
+function renderSelectedTag(tagId, conditionIndex) {
+    // This would need to be implemented to show selected tags
+    // For now, return a placeholder
+    return `<span class="selected-tag" data-tag-id="${tagId}">Tag ${tagId} <button onclick="removeTagFromCondition(${conditionIndex}, '${tagId}')">×</button></span>`;
+}
+
+function renderSelectedNode(nodeId, conditionIndex) {
+    // This would need to be implemented to show selected nodes
+    // For now, return a placeholder
+    return `<span class="selected-node" data-node-id="${nodeId}">Node ${nodeId} <button onclick="removeNodeFromCondition(${conditionIndex}, '${nodeId}')">×</button></span>`;
+}
+
+function getNodeIcon(nodeType) {
+    switch (nodeType) {
+        case 'task': return '☐';
+        case 'note': return '📝';
+        case 'folder': return '📁';
+        case 'smart_folder': return '🔍';
+        default: return '•';
+    }
+}
+
+// Initialize smart folder conditions when editing
+window.initializeSmartFolderEditor = function(node) {
+    const rules = node.smart_folder_data?.rules || { conditions: [], logic: "AND" };
+    currentSmartFolderConditions = [...rules.conditions];
+    
+    // Set initial state if no conditions exist
+    if (currentSmartFolderConditions.length === 0) {
+        addCondition();
+    }
+};
 
 // These functions are already bound globally in main.js
 // window.logout = logout;

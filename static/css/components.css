@@ -521,6 +521,314 @@ body.dark-mode .tag-suggestion.selected {
     background-color: #38383a;
 }
 
+/* Smart Folder Rules Editor */
+.rules-logic-section {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rules-logic-select {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.conditions-list {
+    margin-bottom: 16px;
+}
+
+.condition-editor {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.condition-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.condition-type-select,
+.condition-operator-select {
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-size: 14px;
+}
+
+.condition-type-select {
+    min-width: 140px;
+}
+
+.condition-operator-select {
+    min-width: 120px;
+}
+
+.remove-condition-btn {
+    background: #ff3b30;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+}
+
+.remove-condition-btn:hover {
+    background: #d70015;
+}
+
+.condition-values {
+    margin-top: 8px;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    margin: 0;
+}
+
+.date-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.date-input {
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.date-separator {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.text-input {
+    width: 100%;
+    max-width: 300px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.tag-selector,
+.node-selector {
+    position: relative;
+}
+
+.tag-search-input,
+.node-search-input {
+    width: 100%;
+    max-width: 300px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-color);
+    color: var(--text-color);
+}
+
+.selected-tags,
+.selected-nodes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.selected-tag,
+.selected-node {
+    background: var(--accent-color);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.selected-tag button,
+.selected-node button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.add-condition-section {
+    margin-bottom: 20px;
+}
+
+.add-condition-btn {
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.add-condition-btn:hover {
+    opacity: 0.9;
+}
+
+.preview-section {
+    border-top: 1px solid var(--border-color);
+    padding-top: 16px;
+}
+
+.preview-btn {
+    background: #34c759;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.preview-btn:hover {
+    background: #28a745;
+}
+
+.preview-results {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.preview-results.hidden {
+    display: none;
+}
+
+.preview-header {
+    font-weight: 600;
+    color: var(--text-color);
+    margin-bottom: 8px;
+}
+
+.preview-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.preview-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px;
+    background: var(--bg-color);
+    border-radius: 4px;
+}
+
+.preview-icon {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+}
+
+.preview-title {
+    flex: 1;
+    color: var(--text-color);
+    font-size: 14px;
+}
+
+.preview-type {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: capitalize;
+}
+
+.preview-more {
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 12px;
+    padding: 6px;
+    text-align: center;
+}
+
+.preview-empty,
+.preview-error {
+    color: var(--text-secondary);
+    text-align: center;
+    font-style: italic;
+    padding: 12px;
+}
+
+.preview-error {
+    color: #ff3b30;
+}
+
+.loading {
+    color: var(--text-secondary);
+    text-align: center;
+    font-style: italic;
+    padding: 12px;
+}
+
+/* Node Breadcrumbs for Smart Folder Results */
+.node-breadcrumb {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    line-height: 1.2;
+}
+
+.breadcrumb-item {
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.breadcrumb-item:hover {
+    color: var(--accent-color);
+    text-decoration: underline;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .page-header {
@@ -544,6 +852,27 @@ body.dark-mode .tag-suggestion.selected {
         min-width: unset;
         margin-right: 0;
         font-weight: 600;
+    }
+    
+    .condition-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .condition-type-select,
+    .condition-operator-select {
+        width: 100%;
+    }
+    
+    .checkbox-group {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .date-inputs {
+        flex-direction: column;
+        align-items: stretch;
     }
 }
 

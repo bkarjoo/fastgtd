@@ -78,6 +78,12 @@ class SmartFolderRulesEngine:
         
         elif condition_type == "has_children":
             return await self._build_children_filter(operator, values)
+            
+        elif condition_type == "due_date":
+            return self._build_date_filter(operator, values, "due_at")
+            
+        elif condition_type == "earliest_start":
+            return self._build_date_filter(operator, values, "earliest_start_at")
         
         return None
     
@@ -224,6 +230,99 @@ class SmartFolderRulesEngine:
         results = await self.evaluate_smart_folder(temp_folder, owner_id)
         return results[:limit]  # Limit results for preview
     
+    def _build_date_filter(self, operator: str, values: List[str], date_field: str):
+        """Build filter for date-based conditions (due_at, earliest_start_at)"""
+        from datetime import datetime
+        
+        # Only apply to task nodes since they have these date fields
+        base_condition = and_(
+            Node.node_type == "task",
+            Node.id.in_(
+                select(Task.id)
+            )
+        )
+        
+        if operator == "is_null":
+            return and_(
+                base_condition,
+                Node.id.in_(
+                    select(Task.id).where(
+                        getattr(Task, date_field).is_(None)
+                    )
+                )
+            )
+            
+        elif operator == "is_not_null":
+            return and_(
+                base_condition,
+                Node.id.in_(
+                    select(Task.id).where(
+                        getattr(Task, date_field).is_not(None)
+                    )
+                )
+            )
+        
+        if not values or not values[0]:
+            return None
+            
+        try:
+            date_value = datetime.fromisoformat(values[0]).replace(tzinfo=None)
+            
+            if operator == "on":
+                # On specific date (comparing just the date part)
+                next_day = date_value.replace(hour=23, minute=59, second=59)
+                start_day = date_value.replace(hour=0, minute=0, second=0)
+                return and_(
+                    base_condition,
+                    Node.id.in_(
+                        select(Task.id).where(
+                            and_(
+                                getattr(Task, date_field) >= start_day,
+                                getattr(Task, date_field) <= next_day
+                            )
+                        )
+                    )
+                )
+                
+            elif operator == "before":
+                return and_(
+                    base_condition,
+                    Node.id.in_(
+                        select(Task.id).where(
+                            getattr(Task, date_field) < date_value
+                        )
+                    )
+                )
+                
+            elif operator == "after":
+                return and_(
+                    base_condition,
+                    Node.id.in_(
+                        select(Task.id).where(
+                            getattr(Task, date_field) > date_value
+                        )
+                    )
+                )
+                
+            elif operator == "between" and len(values) >= 2 and values[1]:
+                end_date = datetime.fromisoformat(values[1]).replace(tzinfo=None)
+                return and_(
+                    base_condition,
+                    Node.id.in_(
+                        select(Task.id).where(
+                            and_(
+                                getattr(Task, date_field) >= date_value,
+                                getattr(Task, date_field) <= end_date
+                            )
+                        )
+                    )
+                )
+                
+        except (ValueError, TypeError):
+            pass
+            
+        return None
+    
     def validate_rules(self, rules: Dict[str, Any]) -> List[str]:
         """Validate smart folder rules and return list of errors"""
         errors = []
@@ -253,7 +352,8 @@ class SmartFolderRulesEngine:
             
             valid_types = [
                 "tag_contains", "node_type", "parent_node", 
-                "task_status", "task_priority", "title_contains", "has_children"
+                "task_status", "task_priority", "title_contains", "has_children",
+                "due_date", "earliest_start"
             ]
             if condition_type not in valid_types:
                 errors.append(f"Condition {i+1} has invalid type: {condition_type}")

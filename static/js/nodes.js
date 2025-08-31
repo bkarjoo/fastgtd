@@ -167,7 +167,17 @@ export function renderTree() {
 
     // Find and show root-level nodes or children of current focus
     const parentId = currentRoot || null;
-    const rootNodes = Object.values(nodes).filter(node => node.parent_id === parentId);
+    let rootNodes;
+    
+    // Check if currentRoot is a smart folder
+    const currentNode = currentRoot ? nodes[currentRoot] : null;
+    if (currentNode && currentNode.node_type === 'smart_folder') {
+        // For smart folders, show nodes marked as children of this smart folder
+        rootNodes = Object.values(nodes).filter(node => node._smartFolderChild === currentRoot);
+    } else {
+        // For regular folders, show nodes with matching parent_id
+        rootNodes = Object.values(nodes).filter(node => node.parent_id === parentId);
+    }
     
     // Sort by sort_order (lower numbers first), then by created_at
     rootNodes.sort((a, b) => {
@@ -183,7 +193,12 @@ export function renderTree() {
 
     if (rootNodes.length === 0) {
         if (currentRoot) {
-            html += '<div style="text-align: center; padding: 20px; color: #666;">This folder is empty</div>';
+            const currentNode = nodes[currentRoot];
+            if (currentNode && currentNode.node_type === 'smart_folder') {
+                html += '<div style="text-align: center; padding: 20px; color: #666;">No results</div>';
+            } else {
+                html += '<div style="text-align: center; padding: 20px; color: #666;">This folder is empty</div>';
+            }
         } else {
             html += '<div style="text-align: center; padding: 20px; color: #666;">No nodes yet. Create your first one!</div>';
         }
@@ -271,12 +286,22 @@ function renderNodeItem(node, level) {
         expandHtml = `<div class="node-expand"></div>`; // Empty space for alignment
     }
 
+    // Generate breadcrumb for smart folder children
+    let breadcrumbHtml = '';
+    if (node._smartFolderChild && node.parent_id) {
+        const breadcrumb = generateBreadcrumb(node.parent_id);
+        if (breadcrumb) {
+            breadcrumbHtml = `<div class="node-breadcrumb">${breadcrumb}</div>`;
+        }
+    }
+
     html += `
         <li class="${nodeClasses.join(' ')}" data-node-id="${node.id}" ${dragAttributes} ${dropAttributes} style="margin-left: ${indent}px;" onclick="handleNodeClick('${node.id}', ${!hasChildren && !isTask})">
             ${expandHtml}
             <div class="node-icon">${iconHtml}</div>
             <div class="node-content">
                 <div class="node-title">${escapeHtml(node.title)}</div>
+                ${breadcrumbHtml}
             </div>
         </li>
     `;
@@ -577,6 +602,48 @@ function updateHeaderButtons() {
 function openNoteView(nodeId) { if (typeof window.openNoteView === 'function') window.openNoteView(nodeId); }
 function loadSmartFolderContentsFocus(smartFolderId) { if (typeof window.loadSmartFolderContentsFocus === 'function') window.loadSmartFolderContentsFocus(smartFolderId); }
 function loadSmartFolderContents(smartFolderId, level) { if (typeof window.loadSmartFolderContents === 'function') window.loadSmartFolderContents(smartFolderId, level); }
+function generateBreadcrumb(nodeId, path = []) {
+    // Prevent infinite loops
+    if (path.includes(nodeId)) {
+        return path.map(id => {
+            const pathNode = nodes[id];
+            return pathNode ? `<span class="breadcrumb-item" onclick="navigateToNode('${id}'); event.stopPropagation();">${escapeHtml(pathNode.title)}</span>` : '';
+        }).join(' › ');
+    }
+    
+    const node = nodes[nodeId];
+    if (!node) {
+        return path.length > 0 ? path.map(id => {
+            const pathNode = nodes[id];
+            return pathNode ? `<span class="breadcrumb-item" onclick="navigateToNode('${id}'); event.stopPropagation();">${escapeHtml(pathNode.title)}</span>` : '';
+        }).join(' › ') : '';
+    }
+    
+    path.unshift(nodeId);
+    
+    // If this node has a parent, continue building the breadcrumb
+    if (node.parent_id && nodes[node.parent_id]) {
+        return generateBreadcrumb(node.parent_id, path);
+    }
+    
+    // We've reached the root, build the final breadcrumb string
+    return path.map(id => {
+        const pathNode = nodes[id];
+        return pathNode ? `<span class="breadcrumb-item" onclick="navigateToNode('${id}'); event.stopPropagation();">${escapeHtml(pathNode.title)}</span>` : '';
+    }).filter(item => item).join(' › ');
+}
+
+function navigateToNode(nodeId) {
+    // Navigate to the node's parent context
+    const node = nodes[nodeId];
+    if (node) {
+        // Set the parent as the current root and refresh the tree
+        setCurrentRoot(node.id);
+        renderTree();
+        updateNavigation();
+    }
+}
+
 function useCurrentTemplate() { if (typeof window.useCurrentTemplate === 'function') window.useCurrentTemplate(); }
 function buildSmartFolderRules() { if (typeof window.buildSmartFolderRules === 'function') return window.buildSmartFolderRules(); return []; }
 function refreshAllSmartFolders() { if (typeof window.refreshAllSmartFolders === 'function') window.refreshAllSmartFolders(); }

@@ -18,6 +18,7 @@ import { loadSmartFolderContents, refreshSmartFolderContents, refreshAllSmartFol
 import { toggleFloatingChat, closeFloatingChat, sendChatMessage, sendToAI, updateAIContext, handleChatKeyPress } from './chat.js?v=1756580818';
 import { initializeNavigation, navigateToFocus, navigateToDetails, navigateToEdit, navigateBack, navigateWithUnsavedCheck, saveNodeChanges, deleteNodeFromDetails } from './navigation.js?v=1756588063';
 import { showTagModal, hideTagModal, searchForTags, selectTag, createAndApplyTag, removeTag, handleTagKeydown, showAllTags, exitTagsView, createNewTag, deleteTag } from './tagging.js?v=1756586185';
+import { showAllRules, exitRulesView, createNewRule, editRule, deleteRule } from './rules-management.js';
 
 // Import legacy code (still contains most functionality)
 import '../mobile-app.js?v=1756588063';
@@ -85,6 +86,13 @@ window.showAllTags = showAllTags;
 window.exitTagsView = exitTagsView;
 window.createNewTag = createNewTag;
 window.deleteTag = deleteTag;
+
+// Rules Management function bindings
+window.showAllRules = showAllRules;
+window.exitRulesView = exitRulesView;
+window.createNewRule = createNewRule;
+window.editRule = editRule;
+window.deleteRule = deleteRule;
 
 // Phase 3 Step 6: Smart Folder function bindings (basic loading)
 window.loadSmartFolderContents = loadSmartFolderContents;
