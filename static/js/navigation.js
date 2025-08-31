@@ -273,6 +273,8 @@ function renderEditPage(nodeId) {
     const node = nodes[nodeId];
     if (!node) return;
     
+    const isTestMode = nodeId === 'test-rule-node' || nodeId?.startsWith('test-rule-') || nodeId?.startsWith('sample-');
+    
     // Aggressively remove ALL potential duplicate elements
     const existingEdits = document.querySelectorAll('.node-page');
     existingEdits.forEach(el => {
@@ -293,7 +295,40 @@ function renderEditPage(nodeId) {
     const container = document.getElementById('nodeEdit');
     const contentArea = container.querySelector('#nodeEditContent');
     
-    // Update header
+    // For test mode, replace the header with Test Rule Manager
+    if (isTestMode && node.node_type === 'smart_folder') {
+        const pageHeader = container.querySelector('.page-header');
+        if (pageHeader) {
+            pageHeader.innerHTML = '';
+            pageHeader.style.display = 'none';
+        }
+        
+        // Add Test Rule Manager at the top of content
+        contentArea.innerHTML = renderTestRuleManager() + renderNodeEditForm(node);
+        
+        // Initialize the smart folder editor
+        setTimeout(() => {
+            if (typeof window.initializeSmartFolderEditor === 'function') {
+                window.initializeSmartFolderEditor(node);
+            }
+            
+            // Update the name field
+            const nameField = document.getElementById('testRuleName');
+            if (nameField) {
+                nameField.value = node.title;
+            }
+            
+            // Show test controls
+            const testControls = document.getElementById('testRuleControls');
+            if (testControls) {
+                testControls.style.display = 'block';
+            }
+        }, 100);
+        
+        return;
+    }
+    
+    // Update header for non-test mode
     const titleInput = container.querySelector('#nodeEditTitle');
     if (titleInput) {
         titleInput.value = node.title;
@@ -813,11 +848,25 @@ function renderSmartFolderEditForm(node) {
                     <div id="previewResults" class="preview-results hidden"></div>
                 </div>
             </div>
+            
+            <!-- Test Controls for Rule Parser Development -->
+            <div id="testRuleControls" style="display: none; margin-top: 20px; padding: 15px; background: #fffbf0; border: 2px solid #ff6b6b; border-radius: 8px;">
+                <h4 style="margin-top: 0; color: #ff6b6b;">🧪 Test Rule Parser Controls</h4>
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <button type="button" onclick="showCurrentJSON()" style="padding: 8px 15px; background: #007AFF; color: white; border: none; border-radius: 4px; cursor: pointer;">Show Current JSON</button>
+                    <button type="button" onclick="testJSONToForm()" style="padding: 8px 15px; background: #34C759; color: white; border: none; border-radius: 4px; cursor: pointer;">Test JSON → Form</button>
+                    <button type="button" onclick="testFormToJSON()" style="padding: 8px 15px; background: #FF9500; color: white; border: none; border-radius: 4px; cursor: pointer;">Test Form → JSON</button>
+                </div>
+                <div id="testOutput" style="background: #f8f9fa; color: #212529; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6;"></div>
+            </div>
         </div>
     `;
 }
 
 function renderConditionEditor(condition, index) {
+    // Get available smart folders for "Existing Rule" option
+    const availableRules = getAvailableSmartFolders();
+    
     const conditionTypes = [
         { value: "node_type", label: "Node Type" },
         { value: "task_status", label: "Task Status" },
@@ -828,6 +877,11 @@ function renderConditionEditor(condition, index) {
         { value: "title_contains", label: "Title Contains" },
         { value: "parent_node", label: "Parent Node" }
     ];
+    
+    // Add "Existing Filter" option if there are available rules
+    if (availableRules.length > 0) {
+        conditionTypes.push({ value: "saved_filter", label: "Existing Filter" });
+    }
     
     const operators = getOperatorsForConditionType(condition.type || "node_type");
     
@@ -951,6 +1005,20 @@ function renderConditionValues(condition, index) {
                 </div>
             `;
             
+        case "saved_filter":
+            const availableRules = getAvailableSmartFolders();
+            const selectedRule = values[0] || '';
+            return `
+                <select class="rule-select" style="width: 100%; padding: 8px; border: 1px solid #d1d1d6; border-radius: 4px;">
+                    <option value="">Select a filter...</option>
+                    ${availableRules.map(rule => `
+                        <option value="${rule.id}" ${selectedRule === rule.id ? 'selected' : ''}>
+                            ${rule.title}
+                        </option>
+                    `).join('')}
+                </select>
+            `;
+            
         default:
             return `<input type="text" class="text-input" value="${values[0] || ''}" placeholder="Enter value">`;
     }
@@ -993,6 +1061,12 @@ function getOperatorsForConditionType(conditionType) {
                 { value: "in", label: "is any of" },
                 { value: "not_equals", label: "is not" },
                 { value: "not_in", label: "is not any of" }
+            ];
+            
+        case "saved_filter":
+            return [
+                { value: "matches", label: "matches" },
+                { value: "not_matches", label: "does not match" }
             ];
             
         default:
@@ -1412,15 +1486,28 @@ window.previewSmartFolder = function() {
 };
 
 window.collectSmartFolderRules = function() {
+    console.log('=== collectSmartFolderRules ===');
+    
     const logic = document.getElementById('rulesLogic')?.value || 'AND';
+    console.log('Logic:', logic);
+    
     const conditions = [];
     
     document.querySelectorAll('.condition-editor').forEach((conditionEl, index) => {
         const condition = currentSmartFolderConditions[index];
-        if (!condition) return;
+        if (!condition) {
+            console.log(`Skipping index ${index} - no condition in currentSmartFolderConditions`);
+            return;
+        }
         
         const typeSelect = conditionEl.querySelector('.condition-type-select');
         const operatorSelect = conditionEl.querySelector('.condition-operator-select');
+        
+        console.log(`Condition ${index}:`, {
+            type: typeSelect?.value,
+            operator: operatorSelect?.value,
+            originalCondition: condition
+        });
         
         const collectedCondition = {
             type: typeSelect.value,
@@ -1428,16 +1515,28 @@ window.collectSmartFolderRules = function() {
             values: collectConditionValues(conditionEl, typeSelect.value)
         };
         
+        console.log(`Collected values for condition ${index}:`, collectedCondition.values);
+        
         if (collectedCondition.values.length > 0 || ['is_null', 'is_not_null'].includes(collectedCondition.operator)) {
             conditions.push(collectedCondition);
+        } else {
+            console.log(`Skipping condition ${index} - no values and not a null operator`);
         }
     });
     
-    return { conditions, logic };
+    const result = { conditions, logic };
+    console.log('Final collected rules:', JSON.stringify(result, null, 2));
+    console.log('=== End collectSmartFolderRules ===');
+    
+    return result;
 }
 
 function collectConditionValues(conditionEl, conditionType) {
     switch (conditionType) {
+        case "saved_filter":
+            const ruleSelect = conditionEl.querySelector('.rule-select');
+            return ruleSelect && ruleSelect.value ? [ruleSelect.value] : [];
+            
         case "node_type":
         case "task_status":
         case "task_priority":
@@ -1493,18 +1592,612 @@ function getNodeIcon(nodeType) {
     }
 }
 
+// Get available smart folders for rule references (excluding current one to prevent circular references)
+function getAvailableSmartFolders() {
+    // Get the ID of the smart folder currently being edited
+    const editingNodeId = window.currentNodeId || nodes['test-rule-node']?.id;
+    
+    // Filter for smart folders, excluding the current one
+    const smartFolders = Object.values(nodes).filter(node => {
+        return node.node_type === 'smart_folder' && 
+               node.id !== editingNodeId &&
+               node.smart_folder_data?.rules?.conditions?.length > 0;  // Only include rules with conditions
+    });
+    
+    // Sort by title for better UX
+    smartFolders.sort((a, b) => a.title.localeCompare(b.title));
+    
+    console.log('Available smart folders for rules:', smartFolders.map(sf => ({ id: sf.id, title: sf.title })));
+    
+    return smartFolders;
+}
+
 // Initialize smart folder conditions when editing
 window.initializeSmartFolderEditor = function(node) {
+    console.log('=== initializeSmartFolderEditor ===');
+    console.log('Node:', node);
+    
     const rules = node.smart_folder_data?.rules || { conditions: [], logic: "AND" };
+    console.log('Rules from node:', JSON.stringify(rules, null, 2));
+    
     currentSmartFolderConditions = [...rules.conditions];
+    console.log('Current conditions after copy:', currentSmartFolderConditions);
     
     // Set initial state if no conditions exist
     if (currentSmartFolderConditions.length === 0) {
+        console.log('No conditions found, adding default');
         addCondition();
+    } else {
+        console.log('Refreshing conditions list with existing conditions');
+        // Refresh the display to show existing conditions
+        refreshConditionsList();
     }
+    
+    console.log('=== End initializeSmartFolderEditor ===');
 };
 
 // These functions are already bound globally in main.js
 // window.logout = logout;
 // window.toggleDarkMode = toggleDarkMode;  
 // window.toggleFloatingChat = toggleFloatingChat;
+
+// Test helper functions - define early so they're available when HTML is rendered
+window.showCurrentJSON = function() {
+    console.log('showCurrentJSON called');
+    const output = document.getElementById('testOutput');
+    if (!output) {
+        console.error('testOutput element not found');
+        return;
+    }
+    
+    // Make sure the function is available
+    if (typeof window.collectSmartFolderRules !== 'function') {
+        console.error('collectSmartFolderRules not found');
+        output.textContent = 'Error: collectSmartFolderRules function not available';
+        return;
+    }
+    
+    try {
+        const currentRules = window.collectSmartFolderRules();
+        console.log('Collected rules:', currentRules);
+        output.textContent = '=== Current Form State as JSON ===\n' + 
+                            JSON.stringify(currentRules, null, 2);
+        // Force visibility and handle dark mode
+        output.style.display = 'block';
+        output.style.minHeight = '100px';
+        
+        // Check if dark mode is active
+        const isDarkMode = document.body.classList.contains('dark-mode');
+        if (isDarkMode) {
+            output.style.background = '#2d2d30';
+            output.style.color = '#cccccc';
+            output.style.border = '1px solid #555';
+        } else {
+            output.style.background = '#f8f9fa';
+            output.style.color = '#212529';
+            output.style.border = '1px solid #dee2e6';
+        }
+    } catch (error) {
+        console.error('Error collecting rules:', error);
+        output.textContent = 'Error collecting rules: ' + error.message;
+    }
+};
+
+window.testJSONToForm = function() {
+    const output = document.getElementById('testOutput');
+    if (!output) return;
+    
+    // Get the test node using currentNodeId
+    const testNode = nodes[window.currentNodeId];
+    if (!testNode) {
+        output.textContent = 'Error: Current node not found';
+        return;
+    }
+    
+    const originalJSON = testNode.smart_folder_data.rules;
+    output.textContent = '=== Testing JSON → Form Conversion ===\n\n';
+    output.textContent += 'Original JSON:\n' + JSON.stringify(originalJSON, null, 2) + '\n\n';
+    
+    // Re-initialize the editor with the original JSON
+    initializeSmartFolderEditor(testNode);
+    
+    // After a short delay, collect the form state
+    setTimeout(() => {
+        const formState = collectSmartFolderRules();
+        output.textContent += 'Form State after loading:\n' + JSON.stringify(formState, null, 2) + '\n\n';
+        
+        // Compare
+        const match = JSON.stringify(originalJSON) === JSON.stringify(formState);
+        output.textContent += match ? '✅ MATCH! JSON → Form conversion successful' : 
+                                     '❌ MISMATCH! JSON → Form conversion failed';
+    }, 300);
+};
+
+window.testFormToJSON = function() {
+    const output = document.getElementById('testOutput');
+    if (!output) return;
+    
+    output.textContent = '=== Testing Form → JSON Conversion ===\n\n';
+    
+    // Collect current form state
+    const formState = collectSmartFolderRules();
+    output.textContent += 'Current Form State:\n' + JSON.stringify(formState, null, 2) + '\n\n';
+    
+    // Create a new test node with this JSON
+    const testJSON = formState;
+    const currentNode = nodes[window.currentNodeId];
+    const testNode = {
+        ...currentNode,
+        smart_folder_data: {
+            rules: testJSON
+        }
+    };
+    
+    // Re-initialize with this JSON
+    initializeSmartFolderEditor(testNode);
+    
+    // After a short delay, collect again
+    setTimeout(() => {
+        const newFormState = collectSmartFolderRules();
+        output.textContent += 'Form State after reload:\n' + JSON.stringify(newFormState, null, 2) + '\n\n';
+        
+        // Compare
+        const match = JSON.stringify(testJSON) === JSON.stringify(newFormState);
+        output.textContent += match ? '✅ MATCH! Form → JSON → Form round-trip successful' : 
+                                     '❌ MISMATCH! Form → JSON → Form round-trip failed';
+    }, 300);
+};
+
+// Render test rule manager UI
+function renderTestRuleManager() {
+    // Show ALL smart folders, not just test ones
+    const testRules = Object.values(nodes).filter(n => 
+        n.node_type === 'smart_folder'
+    ).sort((a, b) => a.title.localeCompare(b.title));
+    
+    return `
+        <div style="margin-bottom: 20px; padding: 15px; background: #f0f8ff; border: 2px solid #007AFF; border-radius: 8px;">
+            <h4 style="margin-top: 0; color: #007AFF;">🧪 Test Rule Manager</h4>
+            
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: 600;">Select Rule:</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <select id="testRuleSelector" onchange="loadTestRule(this.value)" style="flex: 1; padding: 8px; border: 1px solid #d1d1d6; border-radius: 4px;">
+                        <option value="">-- Select a test rule --</option>
+                        ${testRules.map(rule => `
+                            <option value="${rule.id}" ${rule.id === currentNodeId ? 'selected' : ''}>
+                                ${rule.title}
+                            </option>
+                        `).join('')}
+                    </select>
+                    <button onclick="createNewTestRule()" style="padding: 8px 15px; background: #34C759; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        + New Rule
+                    </button>
+                    <button onclick="deleteCurrentTestRule()" style="padding: 8px 15px; background: #FF3B30; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                        🗑 Delete
+                    </button>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="testRuleName" placeholder="Rule name..." style="flex: 1; padding: 8px; border: 1px solid #d1d1d6; border-radius: 4px;">
+                <button onclick="saveTestRule()" style="padding: 8px 15px; background: #007AFF; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    💾 Save Rule
+                </button>
+                <button onclick="duplicateTestRule()" style="padding: 8px 15px; background: #FF9500; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    📋 Duplicate
+                </button>
+            </div>
+            
+            <div id="testRuleFeedback" style="margin-top: 10px; padding: 8px; border-radius: 4px; display: none;"></div>
+        </div>
+    `;
+}
+
+// Test rule management functions
+window.loadTestRule = function(ruleId) {
+    if (!ruleId) return;
+    
+    const rule = nodes[ruleId];
+    if (!rule || rule.node_type !== 'smart_folder') {
+        showTestFeedback('Rule not found', 'error');
+        return;
+    }
+    
+    // Update current node
+    window.currentNodeId = ruleId;
+    
+    // Re-render the entire edit page with the new rule
+    setCurrentNodeId(ruleId);
+    setCurrentView('edit');
+    renderEditPage(ruleId);
+    showPage('nodeEdit');
+    
+    // Update the name field after the page renders
+    setTimeout(() => {
+        const nameField = document.getElementById('testRuleName');
+        if (nameField) {
+            nameField.value = rule.title;
+        }
+        
+        // Make sure the selector shows the correct rule
+        const selector = document.getElementById('testRuleSelector');
+        if (selector) {
+            selector.value = ruleId;
+        }
+    }, 100);
+    
+    showTestFeedback(`Loaded: ${rule.title}`, 'success');
+};
+
+window.createNewTestRule = function() {
+    // Prompt for rule name
+    const ruleName = prompt('Enter name for new rule:', 'New Rule');
+    if (!ruleName) {
+        return; // User cancelled
+    }
+    
+    const newId = `test-rule-${Date.now()}`;
+    const newRule = {
+        id: newId,
+        title: ruleName,
+        node_type: 'smart_folder',
+        smart_folder_data: {
+            rules: {
+                logic: 'AND',
+                conditions: []
+            }
+        }
+    };
+    
+    // Add to nodes
+    nodes[newId] = newRule;
+    
+    // Update current node ID and view state
+    window.currentNodeId = newId;
+    setCurrentNodeId(newId);
+    setCurrentView('edit');
+    
+    // Re-render the entire edit page and show it
+    renderEditPage(newId);
+    showPage('nodeEdit');
+    
+    // Update the name field after rendering
+    setTimeout(() => {
+        const nameField = document.getElementById('testRuleName');
+        if (nameField) {
+            nameField.value = ruleName;
+        }
+        
+        // Update selector to show new rule as selected
+        const selector = document.getElementById('testRuleSelector');
+        if (selector) {
+            // Rebuild options
+            const testRules = Object.values(nodes).filter(n => 
+                n.node_type === 'smart_folder' && 
+                (n.id?.startsWith('test-rule-') || n.id?.startsWith('sample-'))
+            ).sort((a, b) => a.title.localeCompare(b.title));
+            
+            selector.innerHTML = '<option value="">-- Select a test rule --</option>' +
+                testRules.map(rule => `
+                    <option value="${rule.id}" ${rule.id === newId ? 'selected' : ''}>
+                        ${rule.title}
+                    </option>
+                `).join('');
+        }
+    }, 100);
+    
+    showTestFeedback(`Created: ${ruleName}`, 'success');
+};
+
+window.saveTestRule = async function() {
+    console.log('saveTestRule called');
+    
+    const nameField = document.getElementById('testRuleName');
+    const ruleName = nameField?.value || 'Unnamed Rule';
+    console.log('Rule name:', ruleName);
+    
+    // Collect current rules
+    if (typeof window.collectSmartFolderRules !== 'function') {
+        console.error('collectSmartFolderRules not available');
+        showTestFeedback('Error: Cannot collect rules', 'error');
+        return;
+    }
+    
+    const rules = window.collectSmartFolderRules();
+    console.log('Collected rules for saving:', rules);
+    
+    // Check if we're updating an existing database node or creating new
+    let ruleId = window.currentNodeId;
+    const isNewRule = !ruleId || ruleId === 'test-rule-node' || ruleId.startsWith('test-rule-') || ruleId.startsWith('sample-');
+    
+    try {
+        let savedNode;
+        
+        if (isNewRule) {
+            // Create new smart folder in database
+            const newNode = {
+                title: ruleName,
+                node_type: 'smart_folder',
+                parent_id: null,
+                sort_order: 999,  // Put at end
+                smart_folder_data: {
+                    rules: rules
+                }
+            };
+            
+            console.log('Creating new smart folder in database:', newNode);
+            
+            const response = await fetch(`${API_BASE}/nodes/`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(newNode)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to save: ${response.status}`);
+            }
+            
+            savedNode = await response.json();
+            console.log('Created in database with ID:', savedNode.id);
+            
+            // Update local nodes cache
+            nodes[savedNode.id] = savedNode;
+            window.currentNodeId = savedNode.id;
+            
+        } else {
+            // Update existing smart folder
+            const existingNode = nodes[ruleId];
+            const updatedNode = {
+                ...existingNode,
+                title: ruleName,
+                smart_folder_data: {
+                    rules: rules
+                }
+            };
+            
+            console.log('Updating existing smart folder:', updatedNode);
+            
+            const response = await fetch(`${API_BASE}/nodes/${ruleId}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(updatedNode)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to update: ${response.status}`);
+            }
+            
+            savedNode = await response.json();
+            console.log('Updated in database');
+            
+            // Update local cache
+            nodes[ruleId] = savedNode;
+        }
+        
+        // Refresh the entire nodes list to get all smart folders
+        const nodesResponse = await fetch(`${API_BASE}/nodes/`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
+        });
+        
+        if (nodesResponse.ok) {
+            const allNodes = await nodesResponse.json();
+            // Update nodes cache with all nodes
+            allNodes.forEach(node => {
+                nodes[node.id] = node;
+            });
+            console.log('Refreshed nodes cache');
+        }
+        
+        // Update selector with all smart folders
+        setTimeout(() => {
+            const selector = document.getElementById('testRuleSelector');
+            if (selector) {
+                // Get ALL smart folders from database
+                const allSmartFolders = Object.values(nodes).filter(n => 
+                    n.node_type === 'smart_folder'
+                ).sort((a, b) => a.title.localeCompare(b.title));
+                
+                console.log('Updating selector with all smart folders:', allSmartFolders.map(r => r.title));
+                
+                selector.innerHTML = '<option value="">-- Select a test rule --</option>' +
+                    allSmartFolders.map(rule => `
+                        <option value="${rule.id}" ${rule.id === savedNode.id ? 'selected' : ''}>
+                            ${rule.title}
+                        </option>
+                    `).join('');
+                
+                selector.value = savedNode.id;  // Force selection
+            }
+        }, 100);
+        
+        showTestFeedback(`Saved to database: ${ruleName}`, 'success');
+        console.log('Save to database complete');
+        
+    } catch (error) {
+        console.error('Error saving to database:', error);
+        showTestFeedback(`Error: ${error.message}`, 'error');
+    }
+};
+
+window.deleteCurrentTestRule = function() {
+    const ruleId = window.currentNodeId;
+    if (!ruleId || ruleId === 'test-rule-node') {
+        showTestFeedback('No rule selected to delete', 'error');
+        return;
+    }
+    
+    const rule = nodes[ruleId];
+    if (!rule) {
+        showTestFeedback('Rule not found', 'error');
+        return;
+    }
+    
+    if (!confirm(`Delete "${rule.title}"?`)) {
+        return;
+    }
+    
+    // Delete the rule
+    delete nodes[ruleId];
+    
+    // Create a new rule
+    createNewTestRule();
+    
+    showTestFeedback(`Deleted: ${rule.title}`, 'success');
+};
+
+window.duplicateTestRule = function() {
+    const currentRule = nodes[window.currentNodeId];
+    if (!currentRule) {
+        showTestFeedback('No rule to duplicate', 'error');
+        return;
+    }
+    
+    const newId = `test-rule-${Date.now()}`;
+    const newRule = {
+        ...currentRule,
+        id: newId,
+        title: `${currentRule.title} (Copy)`,
+        smart_folder_data: JSON.parse(JSON.stringify(currentRule.smart_folder_data))  // Deep copy
+    };
+    
+    nodes[newId] = newRule;
+    loadTestRule(newId);
+    
+    showTestFeedback(`Duplicated: ${currentRule.title}`, 'success');
+};
+
+function showTestFeedback(message, type) {
+    const feedback = document.getElementById('testRuleFeedback');
+    if (!feedback) return;
+    
+    feedback.textContent = message;
+    feedback.style.display = 'block';
+    feedback.style.background = type === 'success' ? '#d4edda' : '#f8d7da';
+    feedback.style.color = type === 'success' ? '#155724' : '#721c24';
+    feedback.style.border = `1px solid ${type === 'success' ? '#c3e6cb' : '#f5c6cb'}`;
+    
+    setTimeout(() => {
+        feedback.style.display = 'none';
+    }, 3000);
+}
+
+// Test Rule Editor function (temporary for development)
+window.testRuleEditor = function() {
+    // Create some sample smart folders for testing rule references
+    const sampleSmartFolders = [
+        {
+            id: 'sample-high-priority',
+            title: 'High Priority Tasks',
+            node_type: 'smart_folder',
+            smart_folder_data: {
+                rules: {
+                    logic: 'AND',
+                    conditions: [
+                        { type: 'node_type', operator: 'in', values: ['task'] },
+                        { type: 'task_priority', operator: 'in', values: ['high', 'urgent'] }
+                    ]
+                }
+            }
+        },
+        {
+            id: 'sample-due-soon',
+            title: 'Due This Week',
+            node_type: 'smart_folder',
+            smart_folder_data: {
+                rules: {
+                    logic: 'AND',
+                    conditions: [
+                        { type: 'node_type', operator: 'in', values: ['task'] },
+                        { type: 'due_date', operator: 'between', values: ['2024-01-15', '2024-01-22'] }
+                    ]
+                }
+            }
+        },
+        {
+            id: 'sample-project-notes',
+            title: 'Project Notes',
+            node_type: 'smart_folder',
+            smart_folder_data: {
+                rules: {
+                    logic: 'AND',
+                    conditions: [
+                        { type: 'node_type', operator: 'in', values: ['note'] },
+                        { type: 'title_contains', operator: 'contains', values: ['project'] }
+                    ]
+                }
+            }
+        }
+    ];
+    
+    // Add sample smart folders to nodes
+    sampleSmartFolders.forEach(sf => {
+        nodes[sf.id] = sf;
+    });
+    
+    // Create a test smart folder node if it doesn't exist
+    const testNodeId = 'test-rule-node';
+    
+    // Create test node with sample rules including a saved_rule reference
+    const testNode = {
+        id: testNodeId,
+        title: 'TEST RULE PARSER',
+        node_type: 'smart_folder',
+        smart_folder_data: {
+            rules: {
+                logic: 'AND',
+                conditions: [
+                    {
+                        type: 'saved_filter',
+                        operator: 'matches',
+                        values: ['sample-high-priority']  // Reference to High Priority Tasks
+                    },
+                    {
+                        type: 'title_contains',
+                        operator: 'contains',
+                        values: ['urgent']
+                    }
+                ]
+            }
+        }
+    };
+    
+    // Store in nodes temporarily
+    nodes[testNodeId] = testNode;
+    
+    // Navigate to edit page with this test node
+    setCurrentNodeId(testNodeId);
+    setCurrentView('edit');
+    renderEditPage(testNodeId);
+    showPage('nodeEdit');
+    
+    // Show test controls and set initial name after a short delay
+    setTimeout(() => {
+        const testControls = document.getElementById('testRuleControls');
+        if (testControls) {
+            testControls.style.display = 'block';
+        }
+        
+        const nameField = document.getElementById('testRuleName');
+        if (nameField) {
+            nameField.value = testNode.title;
+        }
+    }, 200);
+    
+    // Add console logging for debugging
+    console.log('=== TEST RULE EDITOR ACTIVATED ===');
+    console.log('Test JSON:', JSON.stringify(testNode.smart_folder_data.rules, null, 2));
+    console.log('Use this page to test JSON <-> Form conversion');
+    console.log('===================================');
+};
+
+// (Test helper functions moved earlier in the file)

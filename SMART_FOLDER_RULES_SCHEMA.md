@@ -123,6 +123,17 @@ Filters nodes by whether they have children
 }
 ```
 
+### 10. saved_filter
+References another smart folder's rules as a filter (for composition and reusability)
+```json
+{
+  "type": "saved_filter",
+  "operator": "matches" | "not_matches",
+  "values": ["smart_folder_uuid"] // UUID of another smart folder to use as a filter
+}
+```
+**Note**: Circular references are prevented - a smart folder cannot reference itself
+
 ## Complete Examples
 
 ### Example 1: All high-priority incomplete tasks
@@ -194,6 +205,31 @@ Filters nodes by whether they have children
   "conditions": []
 }
 ```
+
+### Example 5: Combining saved filters
+```json
+{
+  "logic": "AND",
+  "conditions": [
+    {
+      "type": "saved_filter",
+      "operator": "matches",
+      "values": ["550e8400-e29b-41d4-a716-446655440001"]  // References "High Priority Tasks" filter
+    },
+    {
+      "type": "saved_filter",
+      "operator": "matches", 
+      "values": ["6ba7b810-9dad-11d1-80b4-00c04fd430c9"]  // References "Due This Week" filter
+    },
+    {
+      "type": "tag_contains",
+      "operator": "any",
+      "values": ["urgent-tag-uuid"]
+    }
+  ]
+}
+```
+This creates a smart folder that finds items matching BOTH existing filters AND having the urgent tag
 
 ## Validation Rules
 

@@ -87,18 +87,36 @@ class Note(Node):
 
 
 class SmartFolder(Node):
-    """Smart folder node - dynamic filtering based on rules"""
+    """Smart folder node - subscribes to a single rule for filtering"""
     __tablename__ = "node_smart_folders"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("nodes.id"), primary_key=True)
-    rules: Mapped[dict] = mapped_column(JSON, nullable=False, default=lambda: {"conditions": [], "logic": "AND"})
+    
+    # Reference to the rule this smart folder uses
+    rule_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), 
+        ForeignKey("rules.id", ondelete="SET NULL"), 
+        nullable=True
+    )
+    
+    # Legacy column - will be removed after migration
+    rules: Mapped[dict | None] = mapped_column(
+        JSON, 
+        nullable=True, 
+        default=lambda: {"conditions": [], "logic": "AND"},
+        comment="DEPRECATED - Use rule_id instead"
+    )
+    
     auto_refresh: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Relationship to Rule
+    rule = relationship("Rule", back_populates="smart_folders")
 
     __mapper_args__ = {"polymorphic_identity": "smart_folder"}
 
     def __repr__(self):
-        return f"<SmartFolder(id={self.id}, title='{self.title}', conditions={len(self.rules.get('conditions', []))})>"
+        return f"<SmartFolder(id={self.id}, title='{self.title}', rule_id={self.rule_id})>"
 
 
 class Template(Node):

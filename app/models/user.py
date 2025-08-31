@@ -20,6 +20,7 @@ class User(Base):
     # New unified relationships
     nodes = relationship("Node", back_populates="owner", cascade="all, delete-orphan")
     tags = relationship("Tag", back_populates="owner", cascade="all, delete-orphan")
+    rules = relationship("Rule", back_populates="owner", cascade="all, delete-orphan")
     default_node = relationship("DefaultNode", back_populates="owner", uselist=False, cascade="all, delete-orphan")
     
     # Legacy relationships - disabled during migration

@@ -12,6 +12,7 @@ from app.api.health import router as health_router
 from app.api.auth import router as auth_router
 from app.api.nodes import router as nodes_router
 from app.api.settings import router as settings_router
+from app.api.rules import router as rules_router
 # Legacy API routers - disabled during migration
 # from app.api.lists import router as lists_router
 # from app.api.note_lists import router as note_lists_router
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(nodes_router)
     app.include_router(settings_router, prefix="/settings", tags=["settings"])
     app.include_router(tags_router)
+    app.include_router(rules_router)
     # AI router - now fixed to use unified node system
     try:
         from app.api.ai import router as ai_router
