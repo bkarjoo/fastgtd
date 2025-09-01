@@ -1,7 +1,10 @@
 from typing import List, Optional, Union
 from uuid import UUID
+import os
+import mimetypes
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
@@ -104,6 +107,74 @@ async def instantiate_template(
     # Return the root folder
     await session.refresh(root_folder)
     return await convert_node_to_response(root_folder, session)
+
+
+# File Upload Operations
+@router.post("/upload-file", response_model=NoteResponse)
+async def upload_markdown_file(
+    file: UploadFile = File(...),
+    parent_id: Optional[UUID] = Form(None),
+    title: Optional[str] = Form(None),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> NoteResponse:
+    """Upload a markdown file and create a note from its content"""
+    
+    # File validation
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    
+    # Check file extension
+    file_extension = Path(file.filename).suffix.lower()
+    if file_extension != '.md':
+        raise HTTPException(status_code=400, detail="Only .md files are supported")
+    
+    # Check file size (10MB limit)
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File size too large (max 10MB)")
+    
+    # Decode content
+    try:
+        content_str = content.decode('utf-8')
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded")
+    
+    if not content_str.strip():
+        raise HTTPException(status_code=400, detail="File cannot be empty")
+    
+    # Generate title if not provided
+    if not title:
+        title = Path(file.filename).stem  # Remove extension
+        # Clean up title
+        title = title.replace('_', ' ').replace('-', ' ').title()
+    
+    # Validate parent_id if provided
+    if parent_id:
+        parent_query = select(Node).where(
+            Node.id == parent_id,
+            Node.owner_id == current_user.id
+        )
+        parent_result = await session.execute(parent_query)
+        parent_node = parent_result.scalar_one_or_none()
+        if not parent_node:
+            raise HTTPException(status_code=404, detail="Parent node not found")
+    
+    # Create the note
+    note = Note(
+        owner_id=current_user.id,
+        parent_id=parent_id,
+        title=title,
+        sort_order=0,
+        body=content_str
+    )
+    
+    session.add(note)
+    await session.commit()
+    await session.refresh(note)
+    
+    return await convert_node_to_response(note, session)
 
 
 # CRUD Operations
