@@ -92,7 +92,7 @@ class FolderUpdate(NodeUpdate):
 # Smart Folder-specific schemas
 class SmartFolderCondition(BaseModel):
     """Individual filter condition for smart folders"""
-    type: Literal["tag_contains", "node_type", "parent_node", "task_status", "task_priority", "title_contains", "has_children"]
+    type: Literal["tag_contains", "node_type", "parent_node", "parent_ancestor", "task_status", "task_priority", "title_contains", "has_children"]
     operator: Literal["equals", "in", "any", "all", "contains", "not_equals"]
     values: List[str]
 
@@ -134,6 +134,8 @@ class TemplateData(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     usage_count: int = Field(default=0)
+    target_node_id: Optional[UUID] = None
+    create_container: bool = Field(default=True)
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -10,6 +10,7 @@ from sqlalchemy import (
     Enum,
     Index,
     JSON,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -127,11 +128,20 @@ class Template(Node):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     usage_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    target_node_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), 
+        ForeignKey("nodes.id", ondelete="SET NULL"), 
+        nullable=True
+    )
+    create_container: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    __mapper_args__ = {"polymorphic_identity": "template"}
+    __mapper_args__ = {
+        "polymorphic_identity": "template",
+        "inherit_condition": text("node_templates.id = nodes.id")
+    }
 
     def __repr__(self):
-        return f"<Template(id={self.id}, title='{self.title}', category='{self.category}')>"
+        return f"<Template(id={self.id}, title='{self.title}', category='{self.category}', target_node_id={self.target_node_id}, create_container={self.create_container})>"
 
 
 class Folder(Node):
