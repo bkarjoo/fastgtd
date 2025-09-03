@@ -77,7 +77,7 @@ async def instantiate_template(
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     
-    # Get the first child of the template to determine the actual structure
+    # Get template children
     children_query = select(Node).where(Node.parent_id == template_id)
     children_result = await session.execute(children_query)
     children = children_result.scalars().all()
@@ -85,28 +85,61 @@ async def instantiate_template(
     if not children:
         raise HTTPException(status_code=400, detail="Template has no content to instantiate")
     
-    # Create a folder as the root of the instantiated template
-    root_folder = Folder(
-        owner_id=current_user.id,
-        parent_id=parent_id,
-        title=name,
-        sort_order=0
-    )
+    # Determine target location: use template's target_node_id if set, otherwise use parent_id parameter
+    target_parent_id = template.target_node_id if template.target_node_id else parent_id
     
-    session.add(root_folder)
-    await session.flush()  # Get ID without committing
+    # Validate target parent exists if specified
+    if target_parent_id:
+        parent_query = select(Node).where(
+            Node.id == target_parent_id,
+            Node.owner_id == current_user.id
+        )
+        parent_result = await session.execute(parent_query)
+        parent_node = parent_result.scalar_one_or_none()
+        if not parent_node:
+            raise HTTPException(status_code=404, detail="Target parent node not found")
     
-    # Create copies of all children under the new folder
-    for child in children:
-        await _copy_node_hierarchy(child, root_folder.id, session)
+    # Handle create_container setting
+    if template.create_container:
+        # Create wrapper folder and copy contents inside
+        root_folder = Folder(
+            owner_id=current_user.id,
+            parent_id=target_parent_id,
+            title=name,
+            sort_order=0
+        )
+        session.add(root_folder)
+        await session.flush()  # Get ID without committing
+        
+        # Copy children under the wrapper folder
+        for child in children:
+            await _copy_node_hierarchy(child, root_folder.id, session)
+        
+        # Update template usage count
+        template.usage_count += 1
+        await session.commit()
+        
+        # Return the wrapper folder
+        await session.refresh(root_folder)
+        return await convert_node_to_response(root_folder, session)
     
-    # Update template usage count
-    template.usage_count += 1
-    await session.commit()
-    
-    # Return the root folder
-    await session.refresh(root_folder)
-    return await convert_node_to_response(root_folder, session)
+    else:
+        # Copy contents directly to target location (no wrapper folder)
+        copied_nodes = []
+        for child in children:
+            copied_node = await _copy_node_hierarchy(child, target_parent_id, session, name_override=None)
+            copied_nodes.append(copied_node)
+        
+        # Update template usage count
+        template.usage_count += 1
+        await session.commit()
+        
+        # Return the first copied node (or could return all of them)
+        if copied_nodes:
+            await session.refresh(copied_nodes[0])
+            return await convert_node_to_response(copied_nodes[0], session)
+        else:
+            raise HTTPException(status_code=500, detail="Failed to copy template contents")
 
 
 # File Upload Operations
@@ -255,7 +288,9 @@ async def create_node(
             sort_order=node_data.sort_order,
             description=template_data.description,
             category=template_data.category,
-            usage_count=template_data.usage_count
+            usage_count=template_data.usage_count,
+            target_node_id=template_data.target_node_id,
+            create_container=template_data.create_container
         )
     else:
         raise HTTPException(status_code=400, detail="Invalid node_type")
@@ -293,7 +328,8 @@ async def update_node(
     if node_data.title is not None:
         node.title = node_data.title
     # Check if parent_id was explicitly provided (even if it's None/null)
-    if hasattr(node_data, 'parent_id') and 'parent_id' in node_data.model_dump(exclude_unset=True):
+    # Use model_fields_set to check if parent_id was explicitly provided in the request
+    if 'parent_id' in node_data.model_fields_set:
         node.parent_id = node_data.parent_id
     if node_data.sort_order is not None:
         node.sort_order = node_data.sort_order
@@ -375,6 +411,10 @@ async def update_node(
             node.category = template_data.category
         if template_data.usage_count is not None:
             node.usage_count = template_data.usage_count
+        if template_data.target_node_id is not None:
+            node.target_node_id = template_data.target_node_id
+        if template_data.create_container is not None:
+            node.create_container = template_data.create_container
     
     await session.commit()
     return await get_node_by_id(node_id, session, current_user)
@@ -642,7 +682,9 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
             template_data={
                 "description": template.description,
                 "category": template.category,
-                "usage_count": template.usage_count
+                "usage_count": template.usage_count,
+                "target_node_id": template.target_node_id,
+                "create_container": template.create_container
             }
         )
     
@@ -1097,3 +1139,134 @@ async def _copy_node_hierarchy(source_node: Node, new_parent_id: Optional[UUID],
         await _copy_node_hierarchy(child, new_node.id, session)
     
     return new_node
+
+
+# Template target node endpoints
+@router.get("/templates/{template_id}/target-node")
+async def get_template_target_node(
+    template_id: UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get the target node ID for a template"""
+    
+    # Get the template
+    template_query = select(Template).where(
+        Template.id == template_id,
+        Template.owner_id == current_user.id
+    )
+    result = await session.execute(template_query)
+    template = result.scalar_one_or_none()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return {"target_node_id": str(template.target_node_id) if template.target_node_id else None}
+
+
+@router.put("/templates/{template_id}/target-node")
+async def set_template_target_node(
+    template_id: UUID,
+    request: dict,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Set the target node ID for a template"""
+    
+    # Get the template
+    template_query = select(Template).where(
+        Template.id == template_id,
+        Template.owner_id == current_user.id
+    )
+    result = await session.execute(template_query)
+    template = result.scalar_one_or_none()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Get target_node_id from request
+    target_node_id_str = request.get("target_node_id")
+    
+    # Validate target node exists and belongs to user if provided
+    if target_node_id_str:
+        try:
+            target_node_uuid = UUID(target_node_id_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid target node ID format")
+        
+        # Check if target node exists and belongs to user
+        target_query = select(Node).where(
+            Node.id == target_node_uuid,
+            Node.owner_id == current_user.id
+        )
+        target_result = await session.execute(target_query)
+        target_node = target_result.scalar_one_or_none()
+        
+        if not target_node:
+            raise HTTPException(status_code=404, detail="Target node not found")
+        
+        template.target_node_id = target_node_uuid
+    else:
+        # Clear target node (set to None)
+        template.target_node_id = None
+    
+    await session.commit()
+    
+    return {"success": True, "target_node_id": target_node_id_str}
+
+
+@router.get("/templates/{template_id}/create-container")
+async def get_template_create_container(
+    template_id: UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get the create_container setting for a template"""
+    
+    # Get the template
+    template_query = select(Template).where(
+        Template.id == template_id,
+        Template.owner_id == current_user.id
+    )
+    result = await session.execute(template_query)
+    template = result.scalar_one_or_none()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return {"create_container": template.create_container}
+
+
+@router.put("/templates/{template_id}/create-container")
+async def set_template_create_container(
+    template_id: UUID,
+    request: dict,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Set the create_container setting for a template"""
+    
+    # Get the template
+    template_query = select(Template).where(
+        Template.id == template_id,
+        Template.owner_id == current_user.id
+    )
+    result = await session.execute(template_query)
+    template = result.scalar_one_or_none()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Get create_container from request
+    create_container = request.get("create_container")
+    
+    if create_container is None:
+        raise HTTPException(status_code=400, detail="create_container field is required")
+    
+    if not isinstance(create_container, bool):
+        raise HTTPException(status_code=400, detail="create_container must be a boolean")
+    
+    template.create_container = create_container
+    await session.commit()
+    
+    return {"success": True, "create_container": create_container}

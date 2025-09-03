@@ -102,9 +102,15 @@ async def chat_with_ai(
                 final_response=result["final_response"]
             )
         elif request.stream:
+            # Get stored user context or create basic context
+            user_id = str(current_user.id)
+            user_context = user_context_store.get(user_id, {
+                "user_id": user_id,
+                "email": current_user.email
+            })
             # Return streaming response
             async def generate_stream():
-                async for chunk in chat_with_openai_stream(request.message, request.history):
+                async for chunk in chat_with_openai_stream(request.message, request.history, user_context=user_context):
                     # Send each chunk as SSE format
                     yield f"data: {json.dumps({'chunk': chunk})}\n\n"
                 # Send end marker

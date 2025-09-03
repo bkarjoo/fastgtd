@@ -76,7 +76,12 @@ class SmartFolderRulesEngine:
         operator = condition.get("operator")
         values = condition.get("values", [])
         
-        if not condition_type or not operator or not values:
+        if not condition_type or not operator:
+            return None
+        
+        # Some operators don't require values (e.g., is_today, is_null, is_not_null)
+        no_values_operators = ["is_today", "is_null", "is_not_null"]
+        if operator not in no_values_operators and not values:
             return None
         
         if condition_type == "node_type":
@@ -87,6 +92,9 @@ class SmartFolderRulesEngine:
         
         elif condition_type == "parent_node":
             return self._build_parent_filter(operator, values)
+        
+        elif condition_type == "parent_ancestor":
+            return await self._build_ancestor_filter(operator, values)
         
         elif condition_type == "task_status":
             return self._build_task_status_filter(operator, values)
@@ -170,6 +178,56 @@ class SmartFolderRulesEngine:
             pass
         return None
     
+    async def _build_ancestor_filter(self, operator: str, values: List[str]):
+        """Build filter for ancestor node conditions (hierarchical parent search)"""
+        try:
+            if operator == "equals":
+                ancestor_id = UUID(values[0])
+                # Use recursive CTE to find all descendants of the ancestor
+                return await self._build_descendants_subquery(ancestor_id)
+            elif operator == "in":
+                ancestor_uuids = [UUID(v) for v in values]
+                # Combine multiple ancestor searches with OR
+                conditions = []
+                for ancestor_id in ancestor_uuids:
+                    condition = await self._build_descendants_subquery(ancestor_id)
+                    if condition is not None:
+                        conditions.append(condition)
+                return or_(*conditions) if conditions else None
+        except (ValueError, TypeError):
+            pass
+        return None
+    
+    async def _build_descendants_subquery(self, ancestor_id: UUID):
+        """Build a subquery to find all descendants of an ancestor node using recursive CTE"""
+        from sqlalchemy import text
+        
+        # PostgreSQL recursive CTE to find all descendants
+        descendants_cte = text("""
+            WITH RECURSIVE node_hierarchy AS (
+                -- Base case: direct children of the ancestor
+                SELECT id, parent_id, title
+                FROM nodes 
+                WHERE parent_id = :ancestor_id
+                
+                UNION ALL
+                
+                -- Recursive case: children of already found nodes
+                SELECT n.id, n.parent_id, n.title
+                FROM nodes n
+                INNER JOIN node_hierarchy nh ON n.parent_id = nh.id
+            )
+            SELECT id FROM node_hierarchy
+        """)
+        
+        # Execute the CTE to get descendant IDs
+        result = await self.session.execute(descendants_cte, {"ancestor_id": ancestor_id})
+        descendant_ids = [row[0] for row in result.fetchall()]
+        
+        if descendant_ids:
+            return Node.id.in_(descendant_ids)
+        return None
+    
     def _build_task_status_filter(self, operator: str, values: List[str]):
         """Build filter for task status conditions (only applies to task nodes)"""
         try:
@@ -187,6 +245,14 @@ class SmartFolderRulesEngine:
                     Node.node_type == "task",
                     Node.id.in_(
                         select(Task.id).where(Task.status.in_(statuses))
+                    )
+                )
+            elif operator == "not_in":
+                statuses = [TaskStatus(v) for v in values]
+                return and_(
+                    Node.node_type == "task",
+                    Node.id.in_(
+                        select(Task.id).where(~Task.status.in_(statuses))
                     )
                 )
         except (ValueError, TypeError):
@@ -310,7 +376,7 @@ class SmartFolderRulesEngine:
     
     def _build_date_filter(self, operator: str, values: List[str], date_field: str):
         """Build filter for date-based conditions (due_at, earliest_start_at)"""
-        from datetime import datetime
+        from datetime import datetime, timezone
         
         # Only apply to task nodes since they have these date fields
         base_condition = and_(
@@ -336,6 +402,24 @@ class SmartFolderRulesEngine:
                 Node.id.in_(
                     select(Task.id).where(
                         getattr(Task, date_field).is_not(None)
+                    )
+                )
+            )
+        
+        elif operator == "is_today":
+            # Handle "is_today" operator - no values needed
+            today = datetime.now(timezone.utc).date()
+            start_of_day = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+            end_of_day = datetime.combine(today, datetime.max.time()).replace(tzinfo=timezone.utc)
+            
+            return and_(
+                base_condition,
+                Node.id.in_(
+                    select(Task.id).where(
+                        and_(
+                            getattr(Task, date_field) >= start_of_day,
+                            getattr(Task, date_field) <= end_of_day
+                        )
                     )
                 )
             )
@@ -429,7 +513,7 @@ class SmartFolderRulesEngine:
                 continue
             
             valid_types = [
-                "tag_contains", "node_type", "parent_node", 
+                "tag_contains", "node_type", "parent_node", "parent_ancestor",
                 "task_status", "task_priority", "title_contains", "has_children",
                 "due_date", "earliest_start", "saved_filter"
             ]
@@ -442,7 +526,13 @@ class SmartFolderRulesEngine:
                 continue
             
             values = condition.get("values", [])
-            if not isinstance(values, list) or not values:
+            if not isinstance(values, list):
+                errors.append(f"Condition {i+1} 'values' must be a list")
+                continue
+                
+            # Some operators don't require values (e.g., is_today, is_null, is_not_null)
+            no_values_operators = ["is_today", "is_null", "is_not_null"]
+            if operator not in no_values_operators and not values:
                 errors.append(f"Condition {i+1} must have non-empty 'values' list")
         
         return errors
