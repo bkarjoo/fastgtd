@@ -1,6 +1,6 @@
 # FastGTD MCP Tools Index
 
-## Current Available Tools (24 tools)
+## Current Available Tools (25 tools)
 
 ### ✅ Navigation & Search
 - **`get_node_tree`** - Browse hierarchical structure of tasks, notes, and folders
@@ -68,6 +68,11 @@
 - **`add_note_to_current_node`** - Create note in current location
   - Parameters: `title` (required), `content`
   - Returns: Created note details
+  - Status: ✅ Working
+
+- **`add_note_to_node_id`** - Create note in specific node by ID
+  - Parameters: `node_id` (required), `title` (required), `content` (optional)
+  - Returns: Created note details with note ID
   - Status: ✅ Working
 
 - **`update_note`** - Update existing note's title and/or content
@@ -182,4 +187,4 @@ All 4 phases have been successfully implemented:
 - ✅ **Additional**: `get_smart_folder_contents` for smart folder automation
 - ✅ **Additional**: `instantiate_template` for template-based project creation
 
-**Total: 22 fully functional MCP tools ready for AI assistant integration!**
+**Total: 25 fully functional MCP tools ready for AI assistant integration!**
