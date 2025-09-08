@@ -80,7 +80,7 @@ class SmartFolderRulesEngine:
             return None
         
         # Some operators don't require values (e.g., is_today, is_null, is_not_null)
-        no_values_operators = ["is_today", "is_null", "is_not_null"]
+        no_values_operators = ["is_today", "is_null", "is_not_null", "is_overdue", "this_week", "next_week", "this_month", "yesterday", "tomorrow"]
         if operator not in no_values_operators and not values:
             return None
         
@@ -376,7 +376,7 @@ class SmartFolderRulesEngine:
     
     def _build_date_filter(self, operator: str, values: List[str], date_field: str):
         """Build filter for date-based conditions (due_at, earliest_start_at)"""
-        from datetime import datetime, timezone
+        from datetime import datetime, timezone, timedelta
         
         # Only apply to task nodes since they have these date fields
         base_condition = and_(
@@ -424,8 +424,362 @@ class SmartFolderRulesEngine:
                 )
             )
         
+        # Phase 1: Overdue Detection (no values needed)
+        elif operator == "is_overdue":
+            # Due date is in the past (only applies to due_at field)
+            if date_field != "due_at":
+                return None
+            today_start = datetime.combine(datetime.now(timezone.utc).date(), datetime.min.time()).replace(tzinfo=timezone.utc)
+            return and_(
+                base_condition,
+                Node.id.in_(
+                    select(Task.id).where(
+                        and_(
+                            Task.due_at.is_not(None),
+                            Task.due_at < today_start
+                        )
+                    )
+                )
+            )
+        
+        # Phase 3: Calendar Periods (no values needed)
+        elif operator == "this_week":
+            # Current calendar week (Monday to Sunday)
+            today = datetime.now(timezone.utc).date()
+            # Calculate start of week (Monday)
+            days_since_monday = today.weekday()  # Monday = 0, Sunday = 6
+            week_start = today - timedelta(days=days_since_monday)
+            week_end = week_start + timedelta(days=6)
+            
+            start_of_week = datetime.combine(week_start, datetime.min.time()).replace(tzinfo=timezone.utc)
+            end_of_week = datetime.combine(week_end, datetime.max.time()).replace(tzinfo=timezone.utc)
+            
+            return and_(
+                base_condition,
+                Node.id.in_(
+                    select(Task.id).where(
+                        and_(
+                            getattr(Task, date_field).is_not(None),
+                            getattr(Task, date_field) >= start_of_week,
+                            getattr(Task, date_field) <= end_of_week
+                        )
+                    )
+                )
+            )
+            
+        elif operator == "next_week":
+            # Next calendar week (Monday to Sunday)
+            today = datetime.now(timezone.utc).date()
+            days_since_monday = today.weekday()
+            this_week_start = today - timedelta(days=days_since_monday)
+            next_week_start = this_week_start + timedelta(days=7)
+            next_week_end = next_week_start + timedelta(days=6)
+            
+            start_of_next_week = datetime.combine(next_week_start, datetime.min.time()).replace(tzinfo=timezone.utc)
+            end_of_next_week = datetime.combine(next_week_end, datetime.max.time()).replace(tzinfo=timezone.utc)
+            
+            return and_(
+                base_condition,
+                Node.id.in_(
+                    select(Task.id).where(
+                        and_(
+                            getattr(Task, date_field).is_not(None),
+                            getattr(Task, date_field) >= start_of_next_week,
+                            getattr(Task, date_field) <= end_of_next_week
+                        )
+                    )
+                )
+            )
+            
+        elif operator == "this_month":
+            # Current calendar month
+            today = datetime.now(timezone.utc).date()
+            month_start = today.replace(day=1)
+            # Get last day of month
+            if today.month == 12:
+                next_month_start = today.replace(year=today.year + 1, month=1, day=1)
+            else:
+                next_month_start = today.replace(month=today.month + 1, day=1)
+            month_end = next_month_start - timedelta(days=1)
+            
+            start_of_month = datetime.combine(month_start, datetime.min.time()).replace(tzinfo=timezone.utc)
+            end_of_month = datetime.combine(month_end, datetime.max.time()).replace(tzinfo=timezone.utc)
+            
+            return and_(
+                base_condition,
+                Node.id.in_(
+                    select(Task.id).where(
+                        and_(
+                            getattr(Task, date_field).is_not(None),
+                            getattr(Task, date_field) >= start_of_month,
+                            getattr(Task, date_field) <= end_of_month
+                        )
+                    )
+                )
+            )
+            
+        elif operator == "yesterday":
+            # Date was yesterday
+            yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
+            start_of_day = datetime.combine(yesterday, datetime.min.time()).replace(tzinfo=timezone.utc)
+            end_of_day = datetime.combine(yesterday, datetime.max.time()).replace(tzinfo=timezone.utc)
+            
+            return and_(
+                base_condition,
+                Node.id.in_(
+                    select(Task.id).where(
+                        and_(
+                            getattr(Task, date_field) >= start_of_day,
+                            getattr(Task, date_field) <= end_of_day
+                        )
+                    )
+                )
+            )
+            
+        elif operator == "tomorrow":
+            # Date is tomorrow
+            tomorrow = datetime.now(timezone.utc).date() + timedelta(days=1)
+            start_of_day = datetime.combine(tomorrow, datetime.min.time()).replace(tzinfo=timezone.utc)
+            end_of_day = datetime.combine(tomorrow, datetime.max.time()).replace(tzinfo=timezone.utc)
+            
+            return and_(
+                base_condition,
+                Node.id.in_(
+                    select(Task.id).where(
+                        and_(
+                            getattr(Task, date_field) >= start_of_day,
+                            getattr(Task, date_field) <= end_of_day
+                        )
+                    )
+                )
+            )
+        
+        # Operators that require values
         if not values or not values[0]:
             return None
+            
+        # Phase 1: Overdue Detection (with values)
+        if operator in ["overdue_by_days", "overdue_by_more_than", "overdue_by_less_than"]:
+            if date_field != "due_at":  # Only applies to due dates
+                return None
+            try:
+                days = int(values[0])
+                today = datetime.now(timezone.utc).date()
+                
+                if operator == "overdue_by_days":
+                    # Overdue by exactly N days
+                    target_date = today - timedelta(days=days)
+                    start_of_day = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    end_of_day = datetime.combine(target_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    Task.due_at >= start_of_day,
+                                    Task.due_at <= end_of_day
+                                )
+                            )
+                        )
+                    )
+                elif operator == "overdue_by_more_than":
+                    # Overdue by more than N days
+                    cutoff_date = today - timedelta(days=days)
+                    cutoff_end = datetime.combine(cutoff_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    Task.due_at.is_not(None),
+                                    Task.due_at < cutoff_end
+                                )
+                            )
+                        )
+                    )
+                elif operator == "overdue_by_less_than":
+                    # Overdue by less than N days
+                    cutoff_date = today - timedelta(days=days)
+                    today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    cutoff_start = datetime.combine(cutoff_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    Task.due_at.is_not(None),
+                                    Task.due_at < today_start,
+                                    Task.due_at >= cutoff_start
+                                )
+                            )
+                        )
+                    )
+            except (ValueError, TypeError):
+                return None
+        
+        # Phase 1: Upcoming/Due Soon (with values)
+        elif operator in ["due_in_days", "due_within_days", "due_in_more_than_days"]:
+            try:
+                days = int(values[0])
+                today = datetime.now(timezone.utc).date()
+                
+                if operator == "due_in_days":
+                    # Due in exactly N days
+                    target_date = today + timedelta(days=days)
+                    start_of_day = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    end_of_day = datetime.combine(target_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    getattr(Task, date_field) >= start_of_day,
+                                    getattr(Task, date_field) <= end_of_day
+                                )
+                            )
+                        )
+                    )
+                elif operator == "due_within_days":
+                    # Due within next N days (includes today)
+                    today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    end_date = today + timedelta(days=days)
+                    end_of_period = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    getattr(Task, date_field).is_not(None),
+                                    getattr(Task, date_field) >= today_start,
+                                    getattr(Task, date_field) <= end_of_period
+                                )
+                            )
+                        )
+                    )
+                elif operator == "due_in_more_than_days":
+                    # Due more than N days from now
+                    cutoff_date = today + timedelta(days=days)
+                    cutoff_end = datetime.combine(cutoff_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    getattr(Task, date_field).is_not(None),
+                                    getattr(Task, date_field) > cutoff_end
+                                )
+                            )
+                        )
+                    )
+            except (ValueError, TypeError):
+                return None
+        
+        # Phase 2: Relative Date Ranges (with values)
+        elif operator in ["within_last_days", "more_than_days_ago", "exactly_days_ago", 
+                         "within_next_days", "starts_within_days", "starts_in_more_than_days"]:
+            try:
+                days = int(values[0])
+                today = datetime.now(timezone.utc).date()
+                
+                if operator == "within_last_days":
+                    # Date within last N days (includes today)
+                    start_date = today - timedelta(days=days)
+                    start_of_period = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    today_end = datetime.combine(today, datetime.max.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    getattr(Task, date_field).is_not(None),
+                                    getattr(Task, date_field) >= start_of_period,
+                                    getattr(Task, date_field) <= today_end
+                                )
+                            )
+                        )
+                    )
+                elif operator == "more_than_days_ago":
+                    # Date more than N days ago
+                    cutoff_date = today - timedelta(days=days)
+                    cutoff_start = datetime.combine(cutoff_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    getattr(Task, date_field).is_not(None),
+                                    getattr(Task, date_field) < cutoff_start
+                                )
+                            )
+                        )
+                    )
+                elif operator == "exactly_days_ago":
+                    # Date exactly N days ago
+                    target_date = today - timedelta(days=days)
+                    start_of_day = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    end_of_day = datetime.combine(target_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    getattr(Task, date_field) >= start_of_day,
+                                    getattr(Task, date_field) <= end_of_day
+                                )
+                            )
+                        )
+                    )
+                elif operator == "within_next_days":
+                    # Date within next N days (includes today)
+                    today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    end_date = today + timedelta(days=days)
+                    end_of_period = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                    return and_(
+                        base_condition,
+                        Node.id.in_(
+                            select(Task.id).where(
+                                and_(
+                                    getattr(Task, date_field).is_not(None),
+                                    getattr(Task, date_field) >= today_start,
+                                    getattr(Task, date_field) <= end_of_period
+                                )
+                            )
+                        )
+                    )
+                elif operator in ["starts_within_days", "starts_in_more_than_days"]:
+                    # These are aliases for due date logic but more semantic for start dates
+                    if operator == "starts_within_days":
+                        today_start = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
+                        end_date = today + timedelta(days=days)
+                        end_of_period = datetime.combine(end_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                        return and_(
+                            base_condition,
+                            Node.id.in_(
+                                select(Task.id).where(
+                                    and_(
+                                        getattr(Task, date_field).is_not(None),
+                                        getattr(Task, date_field) >= today_start,
+                                        getattr(Task, date_field) <= end_of_period
+                                    )
+                                )
+                            )
+                        )
+                    else:  # starts_in_more_than_days
+                        cutoff_date = today + timedelta(days=days)
+                        cutoff_end = datetime.combine(cutoff_date, datetime.max.time()).replace(tzinfo=timezone.utc)
+                        return and_(
+                            base_condition,
+                            Node.id.in_(
+                                select(Task.id).where(
+                                    and_(
+                                        getattr(Task, date_field).is_not(None),
+                                        getattr(Task, date_field) > cutoff_end
+                                    )
+                                )
+                            )
+                        )
+            except (ValueError, TypeError):
+                return None
             
         try:
             date_value = datetime.fromisoformat(values[0]).replace(tzinfo=None)
@@ -531,7 +885,7 @@ class SmartFolderRulesEngine:
                 continue
                 
             # Some operators don't require values (e.g., is_today, is_null, is_not_null)
-            no_values_operators = ["is_today", "is_null", "is_not_null"]
+            no_values_operators = ["is_today", "is_null", "is_not_null", "is_overdue", "this_week", "next_week", "this_month", "yesterday", "tomorrow"]
             if operator not in no_values_operators and not values:
                 errors.append(f"Condition {i+1} must have non-empty 'values' list")
         

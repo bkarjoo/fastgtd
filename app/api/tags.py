@@ -171,7 +171,9 @@ async def update_tag(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Update an existing tag"""
+    """Update an existing tag. If renaming to an existing tag name, merges the tags."""
+    from app.models.node_associations import node_tags
+    from sqlalchemy import insert, delete as sql_delete
     
     # Get existing tag
     query = select(Tag).where(
@@ -184,43 +186,90 @@ async def update_tag(
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
     
-    # Update fields if provided
-    try:
-        if name is not None:
-            # Check for duplicate name (excluding current tag)
-            dup_query = select(Tag).where(
-                Tag.owner_id == current_user.id,
-                Tag.name == name.strip(),
-                Tag.id != tag_id
+    # Handle tag name update with potential merge
+    if name is not None and name.strip() != tag.name:
+        new_name = name.strip()
+        
+        # Check if a tag with the new name already exists
+        existing_query = select(Tag).where(
+            Tag.owner_id == current_user.id,
+            Tag.name == new_name,
+            Tag.id != tag_id
+        )
+        existing_result = await db.execute(existing_query)
+        existing_tag = existing_result.scalar_one_or_none()
+        
+        if existing_tag:
+            # Merge tags: move all node associations from current tag to existing tag
+            
+            # Get all nodes tagged with the current tag
+            current_associations_query = select(node_tags.c.node_id).where(
+                node_tags.c.tag_id == tag.id
             )
-            dup_result = await db.execute(dup_query)
-            if dup_result.scalar_one_or_none():
-                raise HTTPException(status_code=409, detail="Tag with this name already exists")
+            current_result = await db.execute(current_associations_query)
+            current_node_ids = [row[0] for row in current_result.fetchall()]
             
-            tag.name = name.strip()
-        
-        if description is not None:
-            tag.description = description.strip() if description else None
+            if current_node_ids:
+                # Get nodes already tagged with the existing tag to avoid duplicates
+                existing_associations_query = select(node_tags.c.node_id).where(
+                    node_tags.c.tag_id == existing_tag.id,
+                    node_tags.c.node_id.in_(current_node_ids)
+                )
+                existing_result = await db.execute(existing_associations_query)
+                existing_node_ids = {row[0] for row in existing_result.fetchall()}
+                
+                # Find nodes that need to be moved (not already associated with existing tag)
+                nodes_to_move = [node_id for node_id in current_node_ids if node_id not in existing_node_ids]
+                
+                if nodes_to_move:
+                    # Add associations to the existing tag
+                    associations_to_add = [
+                        {"node_id": node_id, "tag_id": existing_tag.id}
+                        for node_id in nodes_to_move
+                    ]
+                    await db.execute(insert(node_tags).values(associations_to_add))
+                
+                # Delete all associations with the current tag
+                await db.execute(
+                    sql_delete(node_tags).where(node_tags.c.tag_id == tag.id)
+                )
             
-        if color is not None:
-            if color and not color.startswith('#'):
-                raise HTTPException(status_code=400, detail="Color must be a hex code starting with #")
-            tag.color = color
+            # Delete the current tag
+            await db.delete(tag)
+            await db.commit()
+            
+            return {
+                "id": str(existing_tag.id),
+                "name": existing_tag.name,
+                "description": existing_tag.description,
+                "color": existing_tag.color,
+                "merged": True,
+                "message": f"Tag merged with existing tag '{new_name}'"
+            }
+        else:
+            # No existing tag with new name, just rename
+            tag.name = new_name
+    
+    # Update other fields
+    if description is not None:
+        tag.description = description.strip() if description else None
         
-        await db.commit()
-        await db.refresh(tag)
-        
-        return {
-            "id": str(tag.id),
-            "name": tag.name,
-            "description": tag.description,
-            "color": tag.color,
-            "updated_at": tag.updated_at.isoformat() if tag.updated_at else None
-        }
-        
-    except IntegrityError:
-        await db.rollback()
-        raise HTTPException(status_code=409, detail="Tag with this name already exists")
+    if color is not None:
+        if color and not color.startswith('#'):
+            raise HTTPException(status_code=400, detail="Color must be a hex code starting with #")
+        tag.color = color
+    
+    await db.commit()
+    await db.refresh(tag)
+    
+    return {
+        "id": str(tag.id),
+        "name": tag.name,
+        "description": tag.description,
+        "color": tag.color,
+        "updated_at": tag.updated_at.isoformat() if tag.updated_at else None,
+        "merged": False
+    }
 
 
 @router.delete("/{tag_id}", status_code=204)
