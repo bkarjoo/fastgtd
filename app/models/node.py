@@ -37,6 +37,7 @@ class Node(Base):
     parent = relationship("Node", remote_side="Node.id", back_populates="children")
     children = relationship("Node", back_populates="parent", cascade="all, delete-orphan")
     tags = relationship("Tag", secondary="node_tags", back_populates="nodes")
+    artifacts = relationship("Artifact", back_populates="node", cascade="all, delete-orphan")
 
     # Polymorphic configuration
     __mapper_args__ = {

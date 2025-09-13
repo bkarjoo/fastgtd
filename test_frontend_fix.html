@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin-bottom: 20px; padding: 15px; border: 1px solid #ccc; }
+        .result { margin-top: 10px; padding: 10px; background: #f5f5f5; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e9; color: #2e7d32; }
+        button { margin: 5px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Frontend Parent ID Fix Test</h1>
+    <p>This page tests the URL safety module and buildNodeURL function.</p>
+
+    <div class="test-section">
+        <h3>Test 1: buildNodeURL function</h3>
+        <button onclick="testBuildNodeURL()">Test buildNodeURL</button>
+        <div id="buildURLResult" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 2: URL Safety Patched Fetch</h3>
+        <button onclick="testPatchedFetch()">Test Fetch Patching</button>
+        <div id="fetchResult" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 3: Console Output</h3>
+        <p>Check browser console for warning messages from URL safety module.</p>
+    </div>
+
+    <!-- Import the modules we want to test -->
+    <script type="module">
+        // Import URL safety first
+        import './static/js/url-safety.js';
+        import { buildNodeURL } from './static/js/state.js';
+        
+        // Make functions available globally for testing
+        window.buildNodeURL = buildNodeURL;
+        
+        window.testBuildNodeURL = function() {
+            const result = document.getElementById('buildURLResult');
+            let html = '<h4>buildNodeURL Test Results:</h4>';
+            
+            const tests = [
+                ['http://localhost:8003/nodes/', null, 'null parent'],
+                ['http://localhost:8003/nodes/', '', 'empty parent'],
+                ['http://localhost:8003/nodes/', 'null', 'string "null" parent'],
+                ['http://localhost:8003/nodes/', 'invalid-uuid', 'invalid UUID'],
+                ['http://localhost:8003/nodes/', '123e4567-e89b-12d3-a456-426614174000', 'valid UUID'],
+            ];
+            
+            tests.forEach(([baseUrl, parentId, description]) => {
+                try {
+                    const result = buildNodeURL(baseUrl, parentId);
+                    const isClean = !result.includes('parent_id=null') && !result.includes('parent_id=') && !result.includes('parent_id=invalid');
+                    const className = isClean ? 'success' : 'error';
+                    html += `<p class="${className}"><strong>${description}:</strong> ${result}</p>`;
+                } catch (e) {
+                    html += `<p class="error"><strong>${description}:</strong> ERROR - ${e.message}</p>`;
+                }
+            });
+            
+            result.innerHTML = html;
+        };
+        
+        window.testPatchedFetch = function() {
+            const result = document.getElementById('fetchResult');
+            let html = '<h4>Fetch Patching Test Results:</h4>';
+            
+            // Test invalid URLs that should be cleaned
+            const testUrls = [
+                'http://localhost:8003/nodes/?parent_id=null',
+                'http://localhost:8003/nodes/?parent_id=',
+                'http://localhost:8003/nodes/?parent_id=invalid-uuid',
+                'http://localhost:8003/nodes/',
+                'http://localhost:8003/nodes/?parent_id=123e4567-e89b-12d3-a456-426614174000'
+            ];
+            
+            html += '<p><strong>Testing URLs (will fail due to auth, but should show cleaned URLs in console):</strong></p>';
+            
+            const promises = testUrls.map(async (url, index) => {
+                try {
+                    // This will trigger our patched fetch
+                    await fetch(url, { 
+                        method: 'GET',
+                        headers: { 'Authorization': 'Bearer fake-token' }
+                    });
+                } catch (e) {
+                    // Expected to fail due to CORS/auth, but our patch should have cleaned the URL
+                    return `Test ${index + 1}: ${url} - Patched (check console for cleaning messages)`;
+                }
+                return `Test ${index + 1}: ${url} - Request sent (check console)`;
+            });
+            
+            Promise.all(promises).then(results => {
+                html += results.map(r => `<p>${r}</p>`).join('');
+                result.innerHTML = html;
+            });
+            
+            result.innerHTML = html + '<p>Running async tests...</p>';
+        };
+        
+        console.log('Frontend fix test page loaded. URL safety module should be active.');
+    </script>
+</body>
+</html>

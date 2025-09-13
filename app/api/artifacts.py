@@ -1,146 +1,161 @@
+import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from pathlib import Path
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.api.auth import get_current_user
+from app.core.config import get_settings
 from app.db.deps import get_db
 from app.models.artifact import Artifact
-from app.models.task import Task
-from app.models.task_list import TaskList
+from app.models.node import Node
 from app.models.user import User
-from app.schemas.artifact import ArtifactCreate, ArtifactUpdate, ArtifactOut
+from app.schemas.artifact import ArtifactResponse, ArtifactList
+
+router = APIRouter()
 
 
-router = APIRouter(prefix="/artifacts", tags=["artifacts"])
-
-
-async def _ensure_owned_list(db: AsyncSession, owner_id: uuid.UUID, list_id: uuid.UUID) -> TaskList:
-    res = await db.execute(select(TaskList).where(TaskList.id == list_id, TaskList.owner_id == owner_id))
-    lst = res.scalar_one_or_none()
-    if not lst:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="list_not_found")
-    return lst
-
-
-async def _ensure_owned_task(db: AsyncSession, owner_id: uuid.UUID, task_id: uuid.UUID) -> Task:
-    res = await db.execute(select(Task).join(TaskList).where(Task.id == task_id, TaskList.owner_id == owner_id))
-    task = res.scalar_one_or_none()
-    if not task:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task_not_found")
-    return task
-
-
-@router.post("", response_model=ArtifactOut, status_code=201)
-async def create_artifact(
-    payload: ArtifactCreate,
-    db: AsyncSession = Depends(get_db),
+@router.post("", response_model=ArtifactResponse, status_code=status.HTTP_201_CREATED)
+async def upload_artifact(
+    node_id: uuid.UUID = Form(...),
+    file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    if (payload.task_id is None) == (payload.list_id is None):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="provide exactly one of task_id or list_id")
-    if payload.task_id:
-        await _ensure_owned_task(db, current_user.id, payload.task_id)
-    if payload.list_id:
-        await _ensure_owned_list(db, current_user.id, payload.list_id)
+    """Upload a file and attach it to a node."""
+    settings = get_settings()
+    
+    # Verify node exists and belongs to user
+    result = await db.execute(select(Node).filter(Node.id == node_id, Node.owner_id == current_user.id))
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+    
+    # Create storage directory if it doesn't exist
+    storage_path = Path(settings.file_storage_path)
+    storage_path.mkdir(parents=True, exist_ok=True)
+    
+    # Generate unique filename
+    file_uuid = uuid.uuid4()
+    file_extension = Path(file.filename or "").suffix
+    unique_filename = f"{file_uuid}{file_extension}"
+    file_path = storage_path / unique_filename
+    
+    # Save file to disk
+    try:
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Create artifact record
+        artifact = Artifact(
+            node_id=node_id,
+            filename=unique_filename,
+            original_filename=file.filename or "unknown",
+            file_path=str(file_path),
+            mime_type=file.content_type,
+            size_bytes=len(content)
+        )
+        db.add(artifact)
+        await db.commit()
+        await db.refresh(artifact)
+        
+        return artifact
+        
+    except Exception as e:
+        # Clean up file if database operation fails
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
-    art = Artifact(
-        kind=payload.kind,
-        uri=payload.uri,
-        title=payload.title,
-        description=payload.description,
-        mime_type=payload.mime_type,
-        size_bytes=payload.size_bytes,
-        task_id=payload.task_id,
-        list_id=payload.list_id,
+
+@router.get("/{artifact_id}/download")
+async def download_artifact(
+    artifact_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download an artifact file."""
+    # Get artifact and verify user access through node ownership
+    result = await db.execute(
+        select(Artifact)
+        .join(Node)
+        .filter(
+            Artifact.id == artifact_id,
+            Node.owner_id == current_user.id
+        )
     )
-    db.add(art)
-    await db.commit()
-    await db.refresh(art)
-    return art
+    artifact = result.scalar_one_or_none()
+    
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    
+    file_path = Path(artifact.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    return FileResponse(
+        path=file_path,
+        filename=artifact.original_filename,
+        media_type=artifact.mime_type
+    )
 
 
-@router.get("", response_model=list[ArtifactOut])
-async def list_artifacts(
-    task_id: uuid.UUID | None = None,
-    list_id: uuid.UUID | None = None,
-    limit: int = 100,
-    offset: int = 0,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    if (task_id is None) == (list_id is None):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="provide exactly one of task_id or list_id")
-    if task_id is not None:
-        await _ensure_owned_task(db, current_user.id, task_id)
-        res = await db.execute(
-            select(Artifact).where(Artifact.task_id == task_id).order_by(Artifact.created_at).limit(limit).offset(offset)
-        )
-        return res.scalars().all()
-    else:
-        assert list_id is not None
-        await _ensure_owned_list(db, current_user.id, list_id)
-        res = await db.execute(
-            select(Artifact).where(Artifact.list_id == list_id).order_by(Artifact.created_at).limit(limit).offset(offset)
-        )
-        return res.scalars().all()
-
-
-async def _get_owned_artifact_or_404(db: AsyncSession, owner_id: uuid.UUID, artifact_id: uuid.UUID) -> Artifact:
-    res = await db.execute(select(Artifact).where(Artifact.id == artifact_id))
-    art = res.scalar_one_or_none()
-    if not art:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="artifact_not_found")
-    if art.task_id:
-        await _ensure_owned_task(db, owner_id, art.task_id)
-    elif art.list_id:
-        await _ensure_owned_list(db, owner_id, art.list_id)
-    else:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="artifact_parent_missing")
-    return art
-
-
-@router.get("/{artifact_id}", response_model=ArtifactOut)
-async def get_artifact(
-    artifact_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    return await _get_owned_artifact_or_404(db, current_user.id, artifact_id)
-
-
-@router.patch("/{artifact_id}", response_model=ArtifactOut)
-async def update_artifact(
-    artifact_id: uuid.UUID,
-    payload: ArtifactUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    art = await _get_owned_artifact_or_404(db, current_user.id, artifact_id)
-    if payload.title is not None:
-        art.title = payload.title
-    if payload.description is not None:
-        art.description = payload.description
-    if payload.mime_type is not None:
-        art.mime_type = payload.mime_type
-    if payload.size_bytes is not None:
-        art.size_bytes = payload.size_bytes
-    if payload.uri is not None:
-        art.uri = payload.uri
-    if payload.kind is not None:
-        art.kind = payload.kind
-    await db.commit()
-    await db.refresh(art)
-    return art
-
-
-@router.delete("/{artifact_id}", status_code=204)
+@router.delete("/{artifact_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_artifact(
     artifact_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    art = await _get_owned_artifact_or_404(db, current_user.id, artifact_id)
-    await db.delete(art)
+    """Delete an artifact and its file."""
+    # Get artifact and verify user access through node ownership
+    result = await db.execute(
+        select(Artifact)
+        .join(Node)
+        .filter(
+            Artifact.id == artifact_id,
+            Node.owner_id == current_user.id
+        )
+    )
+    artifact = result.scalar_one_or_none()
+    
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+    
+    # Delete file from disk
+    file_path = Path(artifact.file_path)
+    if file_path.exists():
+        try:
+            file_path.unlink()
+        except OSError:
+            pass  # File might already be deleted, continue with database cleanup
+    
+    # Delete artifact record
+    await db.delete(artifact)
     await db.commit()
-    return None
+
+
+@router.get("/node/{node_id}", response_model=ArtifactList)
+async def get_node_artifacts(
+    node_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all artifacts for a node."""
+    # Verify node exists and belongs to user
+    result = await db.execute(select(Node).filter(Node.id == node_id, Node.owner_id == current_user.id))
+    node = result.scalar_one_or_none()
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+    
+    artifacts_result = await db.execute(select(Artifact).filter(Artifact.node_id == node_id))
+    artifacts = artifacts_result.scalars().all()
+    
+    return ArtifactList(
+        artifacts=list(artifacts),
+        total=len(artifacts)
+    )

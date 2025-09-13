@@ -20,7 +20,7 @@ from app.api.rules import router as rules_router
 from app.api.tags import router as tags_router
 # from app.api.tag_lists import router as taglists_router
 # from app.api.notes import router as notes_router
-# from app.api.artifacts import router as artifacts_router
+from app.api.artifacts import router as artifacts_router
 
 
 @asynccontextmanager
@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_router, prefix="/settings", tags=["settings"])
     app.include_router(tags_router)
     app.include_router(rules_router)
+    app.include_router(artifacts_router, prefix="/artifacts", tags=["artifacts"])
     # AI router - now fixed to use unified node system
     try:
         from app.api.ai import router as ai_router

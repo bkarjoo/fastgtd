@@ -1,0 +1,7 @@
+[
+  {
+    "timestamp": "2025-09-03T15:30:56.736735",
+    "prompt": "use add_note_to_node_id to add a note with title 'Second Test' and content 'Testing the tool registration' to the Inbox folder (ID: 4452b957-1e41-4215-af61-3336ee620b3b)",
+    "response": "The note titled **\"Second Test\"** has been successfully added to the Inbox folder. The content of the note is **\"Testing the tool registration.\"** If you need anything else, feel free to ask!"
+  }
+]

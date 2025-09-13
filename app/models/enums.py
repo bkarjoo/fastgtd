@@ -15,7 +15,4 @@ class TaskPriority(str, Enum):
     urgent = "urgent"
 
 
-class ArtifactKind(str, Enum):
-    file = "file"
-    link = "link"
 

@@ -9,6 +9,7 @@ from .node import Node, Task, Note, SmartFolder, Folder  # noqa: F401
 from .node_associations import node_tags  # noqa: F401
 from .default_node import DefaultNode  # noqa: F401
 from .rule import Rule  # noqa: F401
+from .artifact import Artifact  # noqa: F401
 
 # Legacy models - disabled to avoid naming conflicts during migration
 # from .task_list import TaskList  # noqa: F401
@@ -34,5 +35,6 @@ __all__ = [
     "Folder",
     "Rule",
     "DefaultNode",
+    "Artifact",
     "node_tags",
 ]

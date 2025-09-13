@@ -11,8 +11,14 @@ class Settings(BaseSettings):
 
     # Auth/JWT
     jwt_secret: str = "dev-secret-change-me"
-    access_token_expire_minutes: int = 1440
+    access_token_expire_minutes: int = 43200
     jwt_algorithm: str = "HS256"
+
+    # File Storage
+    file_storage_path: str = "/mnt/backup/fastgtdstore"
+    
+    # MCP Downloads
+    default_download_path: str = "/tmp"
 
 
 @lru_cache

@@ -142,72 +142,6 @@ async def instantiate_template(
             raise HTTPException(status_code=500, detail="Failed to copy template contents")
 
 
-# File Upload Operations
-@router.post("/upload-file", response_model=NoteResponse)
-async def upload_markdown_file(
-    file: UploadFile = File(...),
-    parent_id: Optional[UUID] = Form(None),
-    title: Optional[str] = Form(None),
-    session: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-) -> NoteResponse:
-    """Upload a markdown file and create a note from its content"""
-    
-    # File validation
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided")
-    
-    # Check file extension
-    file_extension = Path(file.filename).suffix.lower()
-    if file_extension != '.md':
-        raise HTTPException(status_code=400, detail="Only .md files are supported")
-    
-    # Check file size (10MB limit)
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File size too large (max 10MB)")
-    
-    # Decode content
-    try:
-        content_str = content.decode('utf-8')
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded")
-    
-    if not content_str.strip():
-        raise HTTPException(status_code=400, detail="File cannot be empty")
-    
-    # Generate title if not provided
-    if not title:
-        title = Path(file.filename).stem  # Remove extension
-        # Clean up title
-        title = title.replace('_', ' ').replace('-', ' ').title()
-    
-    # Validate parent_id if provided
-    if parent_id:
-        parent_query = select(Node).where(
-            Node.id == parent_id,
-            Node.owner_id == current_user.id
-        )
-        parent_result = await session.execute(parent_query)
-        parent_node = parent_result.scalar_one_or_none()
-        if not parent_node:
-            raise HTTPException(status_code=404, detail="Parent node not found")
-    
-    # Create the note
-    note = Note(
-        owner_id=current_user.id,
-        parent_id=parent_id,
-        title=title,
-        sort_order=0,
-        body=content_str
-    )
-    
-    session.add(note)
-    await session.commit()
-    await session.refresh(note)
-    
-    return await convert_node_to_response(note, session)
 
 
 # CRUD Operations
@@ -427,8 +361,26 @@ async def delete_node(
     current_user: User = Depends(get_current_user)
 ):
     """Delete a node and all its children"""
+    from app.models.artifact import Artifact
     
     node = await get_node_by_id_raw(node_id, session, current_user)
+    
+    # Get all artifacts associated with this node before deletion
+    artifacts_result = await session.execute(
+        select(Artifact).filter(Artifact.node_id == node_id)
+    )
+    artifacts = artifacts_result.scalars().all()
+    
+    # Delete artifact files from filesystem
+    for artifact in artifacts:
+        file_path = Path(artifact.file_path)
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except OSError:
+                pass  # Continue even if file deletion fails
+    
+    # Delete node (this will cascade delete artifacts from database)
     await session.delete(node)
     await session.commit()
     
