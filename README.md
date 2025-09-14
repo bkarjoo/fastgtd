@@ -43,16 +43,26 @@ This is a GTD (Getting Things Done) application built with FastAPI and React.
 
 6. **Start the backend server**
    ```bash
+   # Using default port
    uvicorn app.main:app --reload
+
+   # Or using the included startup script (port 8003)
+   ./start.sh
    ```
 
 ### Frontend Access
 
+Set your API base URL for consistency across documentation:
+```bash
+export API_BASE=http://localhost:8003  # If using start.sh
+# OR
+export API_BASE=http://localhost:8000  # If using uvicorn directly
+```
+
 The frontend is a mobile web application served by the backend. After starting the backend server, access it at:
 
-- **Main mobile interface**: `http://localhost:8000/mobile`
-- **Desktop interface**: `http://localhost:8000/desktop` 
-- **Test interface**: `http://localhost:8000/mobile-test`
+- **Main mobile interface**: `${API_BASE}/mobile`
+- **Desktop interface**: `${API_BASE}/desktop`
 
 ### Build Tools (Optional)
 

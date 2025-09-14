@@ -2,12 +2,21 @@
 
 ## Overview
 
-The FastGTD API provides a dedicated endpoint for uploading markdown files and automatically creating note records in the database. This feature simplifies the process of importing markdown content without manually crafting JSON payloads.
+The FastGTD API provides a dedicated endpoint for uploading files and attaching them to nodes as artifacts. This feature allows you to attach any type of file to tasks, notes, or other nodes in your GTD system.
+
+## Prerequisites
+
+Set your API base URL for consistency:
+```bash
+export API_BASE=http://127.0.0.1:8003  # If using start.sh
+# OR
+export API_BASE=http://127.0.0.1:8000  # If using uvicorn directly
+```
 
 ## Endpoint
 
 ```
-POST /nodes/upload-file
+POST ${API_BASE}/artifacts
 ```
 
 ## Request Format
@@ -20,80 +29,73 @@ POST /nodes/upload-file
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `file` | File | Yes | Markdown file (.md extension) to upload |
-| `parent_id` | UUID | No | UUID of parent folder/node |
-| `title` | String | No | Custom title for the note (defaults to filename without extension) |
+| `file` | File | Yes | File to upload (any type) |
+| `node_id` | UUID | Yes | UUID of the node to attach the file to |
 
-### File Validation Rules
+### File Processing
 
-- **File Extension**: Only `.md` files are accepted
-- **File Size**: Maximum 10MB per file
-- **Encoding**: Must be UTF-8 encoded
-- **Content**: File cannot be empty (whitespace-only files are rejected)
+- **File Types**: Any file type is accepted (no restrictions)
+- **File Size**: No enforced limit (handled by server configuration)
+- **Encoding**: No encoding validation (files stored as-is)
+- **Content**: Files can be empty
 
 ## Response Format
 
-Returns a standard `NoteResponse` object with the created note details:
+Returns an `ArtifactResponse` object with the created artifact details:
 
 ```json
 {
   "id": "319eb663-c0a8-404d-b284-2cf630cff86e",
-  "owner_id": "0e212ca2-278d-4926-a24f-6f3b691eaf36",
-  "parent_id": null,
-  "node_type": "note",
-  "title": "Test Upload Note",
-  "sort_order": 0,
-  "created_at": "2025-09-01T12:46:22.497374Z",
-  "updated_at": "2025-09-01T12:46:22.497374Z",
-  "is_list": false,
-  "children_count": 0,
-  "tags": [],
-  "note_data": {
-    "body": "# Test Markdown Note\n\nThis is a **test markdown note** for the file upload feature.\n\n## Features Tested\n\n- File upload endpoint\n- Markdown content parsing\n- Note creation from file"
-  }
+  "node_id": "0e212ca2-278d-4926-a24f-6f3b691eaf36",
+  "filename": "a1b2c3d4-e5f6-7890-abcd-ef1234567890.pdf",
+  "original_filename": "project_report.pdf",
+  "mime_type": "application/pdf",
+  "size_bytes": 1048576,
+  "created_at": "2025-09-01T12:46:22.497374Z"
 }
 ```
 
 ## Usage Examples
 
-### Basic Upload with Custom Title
+### Basic File Upload
 
 ```bash
-curl -X POST http://localhost:8001/nodes/upload-file \
+curl -X POST "${API_BASE}/artifacts" \
   -H "Authorization: Bearer <your-access-token>" \
-  -F "file=@my_notes.md" \
-  -F "title=My Important Notes"
+  -F "node_id=f015011d-f8b8-47c2-9300-7493691e6458" \
+  -F "file=@my_document.pdf"
 ```
 
-### Upload to Specific Parent Folder
+### Upload Multiple File Types
 
 ```bash
-curl -X POST http://localhost:8001/nodes/upload-file \
-  -H "Authorization: Bearer <your-access-token>" \
-  -F "file=@brainstorming.md" \
-  -F "parent_id=f015011d-f8b8-47c2-9300-7493691e6458" \
-  -F "title=Project Brainstorming Session"
+# Upload a PDF
+curl -X POST "${API_BASE}/artifacts" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -F "node_id=f015011d-f8b8-47c2-9300-7493691e6458" \
+  -F "file=@report.pdf"
+
+# Upload an image
+curl -X POST "${API_BASE}/artifacts" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -F "node_id=f015011d-f8b8-47c2-9300-7493691e6458" \
+  -F "file=@screenshot.png"
+
+# Upload a text file
+curl -X POST "${API_BASE}/artifacts" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -F "node_id=f015011d-f8b8-47c2-9300-7493691e6458" \
+  -F "file=@notes.txt"
 ```
-
-### Upload with Auto-Generated Title
-
-```bash
-curl -X POST http://localhost:8001/nodes/upload-file \
-  -H "Authorization: Bearer <your-access-token>" \
-  -F "file=@meeting_notes_2025_01_15.md"
-```
-
-*Note: This will create a note with title "Meeting Notes 2025 01 15" (auto-generated from filename)*
 
 ### JavaScript/Fetch Example
 
 ```javascript
 const formData = new FormData();
+formData.append('node_id', 'f015011d-f8b8-47c2-9300-7493691e6458');
 formData.append('file', fileInput.files[0]);
-formData.append('title', 'My Uploaded Note');
-formData.append('parent_id', 'f015011d-f8b8-47c2-9300-7493691e6458');
 
-const response = await fetch('/nodes/upload-file', {
+const response = await fetch(`${API_BASE}/artifacts`, {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${accessToken}`
@@ -102,7 +104,7 @@ const response = await fetch('/nodes/upload-file', {
 });
 
 const result = await response.json();
-console.log('Created note:', result);
+console.log('Created artifact:', result);
 ```
 
 ### Python Requests Example
@@ -110,57 +112,86 @@ console.log('Created note:', result);
 ```python
 import requests
 
-url = 'http://localhost:8001/nodes/upload-file'
+url = f'{API_BASE}/artifacts'
 headers = {
     'Authorization': f'Bearer {access_token}'
 }
 
-with open('my_notes.md', 'rb') as f:
+with open('my_document.pdf', 'rb') as f:
     files = {'file': f}
-    data = {
-        'title': 'My Uploaded Notes',
-        'parent_id': 'f015011d-f8b8-47c2-9300-7493691e6458'
-    }
-    
+    data = {'node_id': 'f015011d-f8b8-47c2-9300-7493691e6458'}
+
     response = requests.post(url, headers=headers, files=files, data=data)
     result = response.json()
-    print(f"Created note: {result['id']}")
+    print(f"Created artifact: {result['id']}")
+```
+
+## Related Endpoints
+
+### Download Artifact
+
+```
+GET ${API_BASE}/artifacts/{artifact_id}/download
+```
+
+Download the file associated with an artifact:
+
+```bash
+curl -X GET "${API_BASE}/artifacts/319eb663-c0a8-404d-b284-2cf630cff86e/download" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -o downloaded_file
+```
+
+### List Node Artifacts
+
+```
+GET ${API_BASE}/artifacts/node/{node_id}
+```
+
+Get all artifacts attached to a specific node:
+
+```bash
+curl -X GET "${API_BASE}/artifacts/node/f015011d-f8b8-47c2-9300-7493691e6458" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+Response:
+```json
+{
+  "artifacts": [
+    {
+      "id": "319eb663-c0a8-404d-b284-2cf630cff86e",
+      "node_id": "f015011d-f8b8-47c2-9300-7493691e6458",
+      "filename": "a1b2c3d4-e5f6-7890-abcd-ef1234567890.pdf",
+      "original_filename": "project_report.pdf",
+      "mime_type": "application/pdf",
+      "size_bytes": 1048576,
+      "created_at": "2025-09-01T12:46:22.497374Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+### Delete Artifact
+
+```
+DELETE ${API_BASE}/artifacts/{artifact_id}
+```
+
+Delete an artifact and its associated file:
+
+```bash
+curl -X DELETE "${API_BASE}/artifacts/319eb663-c0a8-404d-b284-2cf630cff86e" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
 ## Error Responses
 
-### Invalid File Type
+### Node Not Found
 ```json
 {
-  "detail": "Only .md files are supported"
-}
-```
-
-### File Too Large
-```json
-{
-  "detail": "File size too large (max 10MB)"
-}
-```
-
-### Empty File
-```json
-{
-  "detail": "File cannot be empty"
-}
-```
-
-### Invalid Encoding
-```json
-{
-  "detail": "File must be UTF-8 encoded"
-}
-```
-
-### Parent Not Found
-```json
-{
-  "detail": "Parent node not found"
+  "detail": "Node not found"
 }
 ```
 
@@ -171,53 +202,53 @@ with open('my_notes.md', 'rb') as f:
 }
 ```
 
-## Title Generation
+### File Upload Error
+```json
+{
+  "detail": "Failed to upload file: [error details]"
+}
+```
 
-When no custom title is provided, the system automatically generates one from the filename:
+### File Not Found (Download)
+```json
+{
+  "detail": "File not found on disk"
+}
+```
 
-- Removes the `.md` extension
-- Replaces underscores (`_`) and hyphens (`-`) with spaces
-- Applies title case formatting
+## File Storage
 
-**Examples:**
-- `meeting_notes.md` → "Meeting Notes"
-- `project-brainstorming.md` → "Project Brainstorming" 
-- `quick-thoughts.md` → "Quick Thoughts"
-
-## Integration Notes
-
-- The uploaded file content becomes the `body` field of the created note
-- All markdown formatting is preserved exactly as uploaded
-- The created note follows the same structure as notes created via the standard `/nodes/` endpoint
-- Parent-child relationships work the same way as with manually created notes
-- The note can be updated, moved, tagged, and deleted using standard node operations
+- Files are stored on the server filesystem
+- Original filenames are preserved in the database
+- Files are given unique filenames (UUID + original extension) to prevent conflicts
+- File paths are managed internally and not exposed to clients
 
 ## Security Considerations
 
-- Authentication is required - the note will be owned by the authenticated user
-- File size limits prevent abuse (10MB maximum)
-- Only markdown files are accepted to prevent malicious file uploads
-- UTF-8 encoding validation prevents encoding-based attacks
-- Parent node validation ensures users can only upload to folders they own
+- **Authentication Required**: All endpoints require a valid Bearer token
+- **User Isolation**: Users can only access artifacts attached to their own nodes
+- **File Access Control**: Download permissions are validated through node ownership
+- **No File Type Restrictions**: Accept any file type (consider implementing restrictions if needed)
 
 ## Performance Notes
 
-- Files are read into memory during processing
-- Large files (approaching the 10MB limit) may take longer to process
-- Consider implementing async processing for bulk uploads if needed
+- Files are stored directly to disk during upload
+- Large files are handled synchronously (consider async processing for very large files)
+- No built-in file size limits (controlled by server configuration)
 
 ## Bulk Upload Workflow
 
-For uploading multiple files, make separate requests for each file:
+For uploading multiple files to the same node:
 
 ```bash
-# Upload multiple files to the same parent
-for file in *.md; do
-  curl -X POST http://localhost:8001/nodes/upload-file \
+# Upload multiple files to the same node
+for file in *.pdf; do
+  curl -X POST "${API_BASE}/artifacts" \
     -H "Authorization: Bearer $ACCESS_TOKEN" \
-    -F "file=@$file" \
-    -F "parent_id=f015011d-f8b8-47c2-9300-7493691e6458"
+    -F "node_id=f015011d-f8b8-47c2-9300-7493691e6458" \
+    -F "file=@$file"
+  echo "Uploaded: $file"
 done
 ```
 
-This approach allows for better error handling and progress tracking compared to a single bulk endpoint.
+This approach allows for better error handling and progress tracking for each individual file upload.

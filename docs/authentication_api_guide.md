@@ -10,7 +10,14 @@ During testing, we discovered that shell environment variables do not persist be
    - Database migrations are up to date: `alembic upgrade head`
 
 2. **Server Running**
-   - FastAPI server running on port 8001: `uvicorn app.main:app --reload --port 8001`
+   - FastAPI server running: `./start.sh` (port 8003) or `uvicorn app.main:app --reload` (port 8000)
+
+3. **Set API Base URL**
+   ```bash
+   export API_BASE=http://127.0.0.1:8003  # If using start.sh
+   # OR
+   export API_BASE=http://127.0.0.1:8000  # If using uvicorn directly
+   ```
 
 ## WORKING Method: Complete Test in Single Session
 
@@ -27,12 +34,12 @@ echo "=== FastGTD Authentication Test ==="
 
 # Step 1: Health Check
 echo "1. Testing health endpoint..."
-HEALTH=$(curl -s "http://127.0.0.1:8001/health")
+HEALTH=$(curl -s "${API_BASE}/health")
 echo "Health response: $HEALTH"
 
 # Step 2: Create User (ignore error if exists)
 echo -e "\n2. Creating test user..."
-curl -s -X POST "http://127.0.0.1:8001/auth/signup" \
+curl -s -X POST "${API_BASE}/auth/signup" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "scripttestuser@example.com",
@@ -42,7 +49,7 @@ curl -s -X POST "http://127.0.0.1:8001/auth/signup" \
 
 # Step 3: Login and extract token
 echo -e "\n3. Getting authentication token..."
-curl -s -X POST "http://127.0.0.1:8001/auth/login" \
+curl -s -X POST "${API_BASE}/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"email": "scripttestuser@example.com", "password": "testpass123"}' > /tmp/auth_response.json
 
@@ -52,13 +59,13 @@ echo "Token obtained: ${ACCESS_TOKEN:0:30}..."
 
 # Step 4: Test protected endpoint
 echo -e "\n4. Testing protected endpoint..."
-NODES_RESPONSE=$(curl -s -X GET "http://127.0.0.1:8001/nodes/" \
+NODES_RESPONSE=$(curl -s -X GET "${API_BASE}/nodes/" \
   -H "Authorization: Bearer $ACCESS_TOKEN")
 echo "Nodes response: $NODES_RESPONSE"
 
 # Step 5: Create a test node
 echo -e "\n5. Creating test node..."
-NODE_RESPONSE=$(curl -s -X POST "http://127.0.0.1:8001/nodes/" \
+NODE_RESPONSE=$(curl -s -X POST "${API_BASE}/nodes/" \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -74,19 +81,19 @@ echo "Created node ID: $NODE_ID"
 # Step 6: Read the created node
 if [ "$NODE_ID" != "ERROR" ]; then
   echo -e "\n6. Reading created node..."
-  READ_RESPONSE=$(curl -s -X GET "http://127.0.0.1:8001/nodes/$NODE_ID" \
+  READ_RESPONSE=$(curl -s -X GET "${API_BASE}/nodes/$NODE_ID" \
     -H "Authorization: Bearer $ACCESS_TOKEN")
   echo "Read response: $READ_RESPONSE"
-  
+
   # Step 7: Delete the node
   echo -e "\n7. Deleting node..."
-  DELETE_RESPONSE=$(curl -s -X DELETE "http://127.0.0.1:8001/nodes/$NODE_ID" \
+  DELETE_RESPONSE=$(curl -s -X DELETE "${API_BASE}/nodes/$NODE_ID" \
     -H "Authorization: Bearer $ACCESS_TOKEN")
   echo "Delete response status: $?"
-  
+
   # Step 8: Verify node is gone
   echo -e "\n8. Verifying node deletion..."
-  VERIFY_RESPONSE=$(curl -s -X GET "http://127.0.0.1:8001/nodes/$NODE_ID" \
+  VERIFY_RESPONSE=$(curl -s -X GET "${API_BASE}/nodes/$NODE_ID" \
     -H "Authorization: Bearer $ACCESS_TOKEN")
   echo "Verification response: $VERIFY_RESPONSE"
 fi
@@ -114,7 +121,7 @@ If you prefer manual testing, use this file-based approach:
 ### Step 1: Login and Save Token
 ```bash
 # Get login response
-curl -s -X POST "http://127.0.0.1:8001/auth/login" \
+curl -s -X POST "${API_BASE}/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"email": "testuser@example.com", "password": "testpass"}' > /tmp/auth.json
 
@@ -128,11 +135,11 @@ head -c 50 /tmp/token.txt
 ### Step 2: Use Token in Subsequent Commands
 ```bash
 # Test protected endpoint
-curl -X GET "http://127.0.0.1:8001/nodes/" \
+curl -X GET "${API_BASE}/nodes/" \
   -H "Authorization: Bearer $(cat /tmp/token.txt)"
 
 # Create node
-curl -X POST "http://127.0.0.1:8001/nodes/" \
+curl -X POST "${API_BASE}/nodes/" \
   -H "Authorization: Bearer $(cat /tmp/token.txt)" \
   -H "Content-Type: application/json" \
   -d '{"title": "Test Node", "node_type": "task"}' > /tmp/node_response.json
@@ -141,11 +148,11 @@ curl -X POST "http://127.0.0.1:8001/nodes/" \
 python3 -c "import json; print(json.load(open('/tmp/node_response.json'))['id'])" > /tmp/node_id.txt
 
 # Read node
-curl -X GET "http://127.0.0.1:8001/nodes/$(cat /tmp/node_id.txt)" \
+curl -X GET "${API_BASE}/nodes/$(cat /tmp/node_id.txt)" \
   -H "Authorization: Bearer $(cat /tmp/token.txt)"
 
-# Delete node  
-curl -X DELETE "http://127.0.0.1:8001/nodes/$(cat /tmp/node_id.txt)" \
+# Delete node
+curl -X DELETE "${API_BASE}/nodes/$(cat /tmp/node_id.txt)" \
   -H "Authorization: Bearer $(cat /tmp/token.txt)"
 
 # Cleanup
@@ -194,7 +201,7 @@ echo "TOKEN_HERE" | tr -cd '.' | wc -c
 Save token to file and test:
 ```bash
 echo "YOUR_TOKEN_HERE" > /tmp/test_token.txt
-curl -v -X GET "http://127.0.0.1:8001/nodes/" \
+curl -v -X GET "${API_BASE}/nodes/" \
   -H "Authorization: Bearer $(cat /tmp/test_token.txt)"
 ```
 
