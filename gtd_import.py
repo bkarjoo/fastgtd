@@ -98,29 +98,27 @@ class FastGTDImporter:
             self.stats["errors"].append(f"Failed to create folder '{title}': {response.text}")
             return None
 
-    def upload_note_file(self, file_path: str, parent_id: str, title: str = None) -> Optional[str]:
-        """Upload markdown file as note using file upload API"""
+    def upload_note_file(self, file_path: str, node_id: str, title: str = None) -> Optional[str]:
+        """Upload markdown file as artifact using the artifacts API"""
         if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
             self.stats["files_skipped"] += 1
             return None
 
         files = {"file": open(file_path, "rb")}
-        data = {"parent_id": parent_id}
-        if title:
-            data["title"] = title
+        data = {"node_id": node_id}
 
         headers_upload = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
-        
+
         try:
             response = requests.post(
-                f"{BASE_URL}/nodes/upload-file", 
+                f"{BASE_URL}/artifacts",
                 headers=headers_upload,
                 files=files,
                 data=data
             )
             files["file"].close()
-            
-            if response.status_code == 200:
+
+            if response.status_code == 201:  # artifacts endpoint returns 201
                 self.stats["notes_uploaded"] += 1
                 return response.json()["id"]
             else:
