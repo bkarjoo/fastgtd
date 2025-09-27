@@ -119,7 +119,14 @@ async def chat_with_openai(
     # Log user message
     log_to_file(log_file, "user_message", {"message": message})
     
-    client = openai.AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    # Check API key before creating client
+    api_key = os.getenv("OPENAI_API_KEY")
+    print(f"DEBUG: Creating OpenAI client, api_key present: {bool(api_key)}")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not found in environment")
+
+    client = openai.AsyncOpenAI(api_key=api_key)
+    print(f"DEBUG: OpenAI client created successfully")
 
     # Build messages with history
     messages = history.copy() if history else [
@@ -136,9 +143,13 @@ async def chat_with_openai(
 
     try:
         # Prepare tools
+        print(f"DEBUG: Getting MCP manager...")
         mcp_manager = await get_mcp_manager()
+        print(f"DEBUG: MCP manager obtained, getting tools...")
         mcp_tools = mcp_manager.get_all_tools()
+        print(f"DEBUG: Got {len(mcp_tools)} MCP tools, converting to OpenAI format...")
         openai_tools = convert_mcp_tools_to_openai(mcp_tools)
+        print(f"DEBUG: Converted to {len(openai_tools)} OpenAI tools")
         actions_taken = False
         
         # Log available tools

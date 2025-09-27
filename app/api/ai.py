@@ -85,8 +85,20 @@ async def chat_with_ai(
         ChatResponse containing OpenAI's response
     """
     try:
+        print(f"=== AI CHAT ENDPOINT START ===")
+        print(f"User: {current_user.email} (ID: {current_user.id})")
+        print(f"Message: {request.message}")
         print(f"DEBUG: step_by_step = {request.step_by_step}")
         print(f"DEBUG: stream = {request.stream}")
+        print(f"History present: {bool(request.history)}")
+
+        # Check environment before proceeding
+        import os
+        api_key = os.getenv("OPENAI_API_KEY")
+        print(f"API Key present: {bool(api_key)}")
+        if api_key:
+            print(f"API Key starts with: {api_key[:10]}...")
+        print(f"=== CALLING OPENAI HANDLER ===")
         
         if request.step_by_step:
             # Get stored user context or create basic context
@@ -135,6 +147,12 @@ async def chat_with_ai(
                 actions_taken=result["actions_taken"]
             )
     except Exception as e:
+        print(f"=== AI CHAT ERROR ===")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
+        print(f"=== END AI CHAT ERROR ===")
         raise HTTPException(status_code=500, detail=f"AI chat error: {str(e)}")
 
 
