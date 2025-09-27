@@ -77,16 +77,23 @@ class NoteUpdate(NodeUpdate):
     note_data: Optional[NoteData] = None
 
 
-# Folder-specific schemas (pure organizational containers)
+# Folder-specific schemas
+class FolderData(BaseModel):
+    """Folder-specific data"""
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class FolderCreate(NodeCreate):
-    """Schema for creating folders - pure organizational containers"""
+    """Schema for creating folders - organizational containers with optional description"""
     node_type: Literal["folder"] = "folder"
-    # No additional data needed - folders are just containers
+    folder_data: Optional[FolderData] = None
 
 
 class FolderUpdate(NodeUpdate):
     """Schema for updating folders"""
-    pass  # Folders only have base node properties
+    folder_data: Optional[FolderData] = None
 
 
 # Smart Folder-specific schemas
@@ -187,9 +194,9 @@ class NoteResponse(NodeResponse):
 
 
 class FolderResponse(NodeResponse):
-    """Response schema for folders - pure organizational containers"""
+    """Response schema for folders - organizational containers with optional description"""
     node_type: Literal["folder"] = "folder"
-    # No additional data - folders are just containers
+    folder_data: Optional[FolderData] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -245,14 +252,14 @@ class NodeTree(BaseModel):
 # Bulk operations
 class NodeBulkCreate(BaseModel):
     """Schema for bulk node creation"""
-    nodes: List[Union[TaskCreate, NoteCreate, SmartFolderCreate, TemplateCreate]]
+    nodes: List[Union[TaskCreate, NoteCreate, FolderCreate, SmartFolderCreate, TemplateCreate]]
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class NodeBulkUpdate(BaseModel):
     """Schema for bulk node updates"""
-    updates: List[tuple[UUID, Union[TaskUpdate, NoteUpdate, SmartFolderUpdate, TemplateUpdate]]]
+    updates: List[tuple[UUID, Union[TaskUpdate, NoteUpdate, FolderUpdate, SmartFolderUpdate, TemplateUpdate]]]
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -292,10 +299,10 @@ class NodeFilter(BaseModel):
 
 
 # Factory functions for creating polymorphic responses
-def create_node_response(node_data: dict, task_data: dict = None, note_data: dict = None, smart_folder_data: dict = None, template_data: dict = None) -> NodeResponseUnion:
+def create_node_response(node_data: dict, task_data: dict = None, note_data: dict = None, smart_folder_data: dict = None, template_data: dict = None, folder_data: dict = None) -> NodeResponseUnion:
     """Factory function to create appropriate node response based on type"""
     node_type = node_data.get("node_type")
-    
+
     if node_type == "task":
         return TaskResponse(
             **node_data,
@@ -305,6 +312,11 @@ def create_node_response(node_data: dict, task_data: dict = None, note_data: dic
         return NoteResponse(
             **node_data,
             note_data=NoteData(**(note_data or {}))
+        )
+    elif node_type == "folder":
+        return FolderResponse(
+            **node_data,
+            folder_data=FolderData(**(folder_data or {})) if folder_data else None
         )
     elif node_type == "smart_folder":
         return SmartFolderResponse(
@@ -323,6 +335,6 @@ def create_node_response(node_data: dict, task_data: dict = None, note_data: dic
 # Validation helpers
 def validate_node_type(v):
     """Validate node_type values"""
-    if v not in ["task", "note", "smart_folder", "template"]:
-        raise ValueError("node_type must be 'task', 'note', 'smart_folder', or 'template'")
+    if v not in ["task", "note", "folder", "smart_folder", "template"]:
+        raise ValueError("node_type must be 'task', 'note', 'folder', 'smart_folder', or 'template'")
     return v

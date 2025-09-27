@@ -182,12 +182,14 @@ async def create_node(
             body=note_data.body
         )
     elif node_data.node_type == "folder":
-        # Pure organizational container - no additional fields needed
+        # Folder with optional description
+        folder_data = node_data.folder_data if hasattr(node_data, 'folder_data') and node_data.folder_data else None
         node = Folder(
             owner_id=current_user.id,
             parent_id=node_data.parent_id,
             title=node_data.title,
-            sort_order=node_data.sort_order
+            sort_order=node_data.sort_order,
+            description=folder_data.description if folder_data else None
         )
     elif node_data.node_type == "smart_folder":
         smart_folder_data = node_data.smart_folder_data
@@ -337,6 +339,11 @@ async def update_node(
         if smart_folder_data.description is not None:
             node.description = smart_folder_data.description
             
+    elif isinstance(node_data, FolderUpdate) and node_data.folder_data and isinstance(node, Folder):
+        folder_data = node_data.folder_data
+        if folder_data.description is not None:
+            node.description = folder_data.description
+
     elif isinstance(node_data, TemplateUpdate) and node_data.template_data and isinstance(node, Template):
         template_data = node_data.template_data
         if template_data.description is not None:
@@ -641,8 +648,21 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
         )
     
     elif node.node_type == "folder":
-        # Pure organizational container - no additional data needed
-        return FolderResponse(**base_data)
+        # Get folder-specific data
+        folder_query = select(Folder).where(Folder.id == node.id)
+        folder_result = await session.execute(folder_query)
+        folder = folder_result.scalar_one_or_none()
+
+        if folder:
+            return FolderResponse(
+                **base_data,
+                folder_data={
+                    "description": folder.description
+                } if folder.description else None
+            )
+        else:
+            # Fallback for folders without description
+            return FolderResponse(**base_data)
     
     else:
         raise ValueError(f"Unknown node type: {node.node_type}")

@@ -146,13 +146,14 @@ class Template(Node):
 
 
 class Folder(Node):
-    """Folder node - pure organizational container
-    
-    Folders don't have any additional fields beyond the base Node.
-    They exist purely for organization and hierarchy.
-    """
+    """Folder node - organizational container with optional description"""
+    __tablename__ = "node_folders"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("nodes.id"), primary_key=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     __mapper_args__ = {"polymorphic_identity": "folder"}
-    
+
     def __repr__(self):
         return f"<Folder(id={self.id}, title='{self.title}')>"
 
