@@ -16,10 +16,11 @@ from app.models.tag import Tag, node_tags
 from app.schemas.node import (
     NodeCreate, NodeUpdate, NodeResponse, TaskCreate, TaskUpdate, TaskResponse,
     NoteCreate, NoteUpdate, NoteResponse, FolderCreate, FolderUpdate, FolderResponse,
-    SmartFolderCreate, SmartFolderUpdate, SmartFolderResponse, 
+    SmartFolderCreate, SmartFolderUpdate, SmartFolderResponse,
     TemplateCreate, TemplateUpdate, TemplateResponse,
-    NodeResponseUnion, NodeFilter, NodeTree, NodeTreeItem, 
-    NodeMove, NodeReorder, create_node_response
+    NodeResponseUnion, NodeFilter, NodeTree, NodeTreeItem,
+    NodeMove, NodeReorder, create_node_response,
+    SetTemplateTargetNodeRequest, SetTemplateCreateContainerRequest
 )
 from app.schemas.tag import TagResponse
 from app.api.auth import get_current_user
@@ -48,12 +49,8 @@ async def list_templates(
     result = await session.execute(query)
     templates = result.scalars().all()
     
-    responses = []
-    for template in templates:
-        response = await convert_node_to_response(template, session)
-        responses.append(response)
-    
-    return responses
+    # Convert to response format using batch processing
+    return await convert_nodes_to_responses_batch(templates, session)
 
 
 @router.post("/templates/{template_id}/instantiate", response_model=NodeResponseUnion)
@@ -193,25 +190,48 @@ async def create_node(
         )
     elif node_data.node_type == "smart_folder":
         smart_folder_data = node_data.smart_folder_data
-        
-        # Validate rules before creation (only if rules exist)
-        if smart_folder_data.rules is not None:
+
+        # Handle rule_id vs legacy rules
+        rule_id = None
+
+        if smart_folder_data.rule_id:
+            # Validate that the rule exists and is accessible
+            from app.models.rule import Rule
+            rule_query = select(Rule).where(
+                Rule.id == smart_folder_data.rule_id,
+                or_(
+                    Rule.owner_id == current_user.id,
+                    Rule.is_public == True,
+                    Rule.is_system == True
+                )
+            )
+            rule_result = await session.execute(rule_query)
+            rule = rule_result.scalar_one_or_none()
+            if not rule:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Rule {smart_folder_data.rule_id} not found or not accessible"
+                )
+            rule_id = smart_folder_data.rule_id
+
+        elif smart_folder_data.rules is not None:
+            # Legacy rules provided - validate them
             rules_engine = SmartFolderRulesEngine(session)
-            # Handle both dict and Pydantic model cases
             rules_data = smart_folder_data.rules.model_dump() if hasattr(smart_folder_data.rules, 'model_dump') else smart_folder_data.rules
             validation_errors = rules_engine.validate_rules(rules_data)
             if validation_errors:
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"Invalid rules: {'; '.join(validation_errors)}"
                 )
-        
+
         node = SmartFolder(
             owner_id=current_user.id,
             parent_id=node_data.parent_id,
             title=node_data.title,
             sort_order=node_data.sort_order,
-            rules=smart_folder_data.rules or {"conditions": [], "logic": "AND"},
+            rule_id=rule_id,
+            rules=smart_folder_data.rules or {"conditions": [], "logic": "AND"} if not rule_id else None,
             auto_refresh=smart_folder_data.auto_refresh,
             description=smart_folder_data.description
         )
@@ -434,13 +454,8 @@ async def list_nodes(
     result = await session.execute(query)
     nodes = result.scalars().all()
     
-    # Convert to response format
-    responses = []
-    for node in nodes:
-        response = await convert_node_to_response(node, session)
-        responses.append(response)
-    
-    return responses
+    # Convert to response format using batch processing
+    return await convert_nodes_to_responses_batch(nodes, session)
 
 
 @router.get("/tree/{root_id}", response_model=NodeTree)
@@ -541,19 +556,27 @@ async def get_node_by_id(
     return await convert_node_to_response(node, session)
 
 
-async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeResponseUnion:
-    """Convert node to appropriate response format"""
-    
-    # Get children count
-    children_query = select(func.count(Node.id)).where(Node.parent_id == node.id)
-    children_result = await session.execute(children_query)
-    children_count = children_result.scalar() or 0
-    
-    # Load tags for the node
-    tags_query = select(Tag).join(node_tags).where(node_tags.c.node_id == node.id)
-    tags_result = await session.execute(tags_query)
-    tags = tags_result.scalars().all()
-    
+async def convert_node_to_response(node: Node, session: AsyncSession,
+                                    preloaded_children_counts: dict = None,
+                                    preloaded_tags: dict = None) -> NodeResponseUnion:
+    """Convert node to appropriate response format with optional preloaded data"""
+
+    # Use preloaded children count if available, otherwise query
+    if preloaded_children_counts and node.id in preloaded_children_counts:
+        children_count = preloaded_children_counts[node.id]
+    else:
+        children_query = select(func.count(Node.id)).where(Node.parent_id == node.id)
+        children_result = await session.execute(children_query)
+        children_count = children_result.scalar() or 0
+
+    # Use preloaded tags if available, otherwise query
+    if preloaded_tags and node.id in preloaded_tags:
+        tags = preloaded_tags[node.id]
+    else:
+        tags_query = select(Tag).join(node_tags).where(node_tags.c.node_id == node.id)
+        tags_result = await session.execute(tags_query)
+        tags = tags_result.scalars().all()
+
     # Convert tags to response format
     tag_responses = [
         TagResponse(
@@ -565,7 +588,7 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
         )
         for tag in tags
     ]
-    
+
     base_data = {
         "id": node.id,
         "owner_id": node.owner_id,
@@ -579,13 +602,13 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
         "children_count": children_count,
         "tags": tag_responses
     }
-    
+
     if node.node_type == "task":
         # Get task-specific data
         task_query = select(Task).where(Task.id == node.id)
         task_result = await session.execute(task_query)
         task = task_result.scalar_one()
-        
+
         return TaskResponse(
             **base_data,
             task_data={
@@ -600,26 +623,26 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
                 "recurrence_anchor": task.recurrence_anchor
             }
         )
-    
+
     elif node.node_type == "note":
         # Get note-specific data
         note_query = select(Note).where(Note.id == node.id)
         note_result = await session.execute(note_query)
         note = note_result.scalar_one()
-        
+
         return NoteResponse(
             **base_data,
             note_data={
                 "body": note.body
             }
         )
-    
+
     elif node.node_type == "smart_folder":
         # Get smart folder-specific data
         smart_folder_query = select(SmartFolder).where(SmartFolder.id == node.id)
         smart_folder_result = await session.execute(smart_folder_query)
         smart_folder = smart_folder_result.scalar_one()
-        
+
         return SmartFolderResponse(
             **base_data,
             smart_folder_data={
@@ -629,13 +652,13 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
                 "description": smart_folder.description
             }
         )
-    
+
     elif node.node_type == "template":
         # Get template-specific data
         template_query = select(Template).where(Template.id == node.id)
         template_result = await session.execute(template_query)
         template = template_result.scalar_one()
-        
+
         return TemplateResponse(
             **base_data,
             template_data={
@@ -646,7 +669,7 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
                 "create_container": template.create_container
             }
         )
-    
+
     elif node.node_type == "folder":
         # Get folder-specific data
         folder_query = select(Folder).where(Folder.id == node.id)
@@ -663,7 +686,189 @@ async def convert_node_to_response(node: Node, session: AsyncSession) -> NodeRes
         else:
             # Fallback for folders without description
             return FolderResponse(**base_data)
-    
+
+    else:
+        raise ValueError(f"Unknown node type: {node.node_type}")
+
+
+async def convert_nodes_to_responses_batch(nodes: List[Node], session: AsyncSession) -> List[NodeResponseUnion]:
+    """Convert multiple nodes to response format efficiently with batched queries"""
+    if not nodes:
+        return []
+
+    node_ids = [node.id for node in nodes]
+
+    # Batch load children counts
+    children_counts_query = (
+        select(Node.parent_id, func.count(Node.id))
+        .where(Node.parent_id.in_(node_ids))
+        .group_by(Node.parent_id)
+    )
+    children_counts_result = await session.execute(children_counts_query)
+    children_counts = {parent_id: count for parent_id, count in children_counts_result.fetchall()}
+
+    # Batch load tags
+    tags_query = (
+        select(Tag, node_tags.c.node_id)
+        .join(node_tags)
+        .where(node_tags.c.node_id.in_(node_ids))
+    )
+    tags_result = await session.execute(tags_query)
+
+    # Group tags by node_id
+    node_tags_dict = {}
+    for tag, node_id in tags_result.fetchall():
+        if node_id not in node_tags_dict:
+            node_tags_dict[node_id] = []
+        node_tags_dict[node_id].append(tag)
+
+    # Batch load type-specific data
+    type_specific_data = {}
+
+    # Group nodes by type
+    nodes_by_type = {}
+    for node in nodes:
+        if node.node_type not in nodes_by_type:
+            nodes_by_type[node.node_type] = []
+        nodes_by_type[node.node_type].append(node)
+
+    # Batch load each type's specific data
+    for node_type, type_nodes in nodes_by_type.items():
+        type_node_ids = [node.id for node in type_nodes]
+
+        if node_type == "task":
+            task_query = select(Task).where(Task.id.in_(type_node_ids))
+            task_result = await session.execute(task_query)
+            for task in task_result.scalars():
+                type_specific_data[task.id] = task
+
+        elif node_type == "note":
+            note_query = select(Note).where(Note.id.in_(type_node_ids))
+            note_result = await session.execute(note_query)
+            for note in note_result.scalars():
+                type_specific_data[note.id] = note
+
+        elif node_type == "smart_folder":
+            smart_folder_query = select(SmartFolder).where(SmartFolder.id.in_(type_node_ids))
+            smart_folder_result = await session.execute(smart_folder_query)
+            for smart_folder in smart_folder_result.scalars():
+                type_specific_data[smart_folder.id] = smart_folder
+
+        elif node_type == "template":
+            template_query = select(Template).where(Template.id.in_(type_node_ids))
+            template_result = await session.execute(template_query)
+            for template in template_result.scalars():
+                type_specific_data[template.id] = template
+
+        elif node_type == "folder":
+            folder_query = select(Folder).where(Folder.id.in_(type_node_ids))
+            folder_result = await session.execute(folder_query)
+            for folder in folder_result.scalars():
+                type_specific_data[folder.id] = folder
+
+    # Convert all nodes to responses
+    responses = []
+    for node in nodes:
+        response = await convert_node_to_response_with_preloaded_data(
+            node,
+            children_counts.get(node.id, 0),
+            node_tags_dict.get(node.id, []),
+            type_specific_data.get(node.id)
+        )
+        responses.append(response)
+
+    return responses
+
+
+async def convert_node_to_response_with_preloaded_data(
+    node: Node,
+    children_count: int,
+    tags: List[Tag],
+    type_specific_obj = None
+) -> NodeResponseUnion:
+    """Convert node to response format using preloaded data"""
+
+    # Convert tags to response format
+    tag_responses = [
+        TagResponse(
+            id=tag.id,
+            name=tag.name,
+            description=tag.description,
+            color=tag.color,
+            created_at=tag.created_at
+        )
+        for tag in tags
+    ]
+
+    base_data = {
+        "id": node.id,
+        "owner_id": node.owner_id,
+        "parent_id": node.parent_id,
+        "node_type": node.node_type,
+        "title": node.title,
+        "sort_order": node.sort_order,
+        "created_at": node.created_at,
+        "updated_at": node.updated_at,
+        "is_list": children_count > 0,
+        "children_count": children_count,
+        "tags": tag_responses
+    }
+
+    if node.node_type == "task" and type_specific_obj:
+        return TaskResponse(
+            **base_data,
+            task_data={
+                "description": type_specific_obj.description,
+                "status": type_specific_obj.status,
+                "priority": type_specific_obj.priority,
+                "due_at": type_specific_obj.due_at,
+                "earliest_start_at": type_specific_obj.earliest_start_at,
+                "completed_at": type_specific_obj.completed_at,
+                "archived": type_specific_obj.archived,
+                "recurrence_rule": type_specific_obj.recurrence_rule,
+                "recurrence_anchor": type_specific_obj.recurrence_anchor
+            }
+        )
+
+    elif node.node_type == "note" and type_specific_obj:
+        return NoteResponse(
+            **base_data,
+            note_data={
+                "body": type_specific_obj.body
+            }
+        )
+
+    elif node.node_type == "smart_folder" and type_specific_obj:
+        return SmartFolderResponse(
+            **base_data,
+            smart_folder_data={
+                "rule_id": type_specific_obj.rule_id,
+                "rules": type_specific_obj.rules,
+                "auto_refresh": type_specific_obj.auto_refresh,
+                "description": type_specific_obj.description
+            }
+        )
+
+    elif node.node_type == "template" and type_specific_obj:
+        return TemplateResponse(
+            **base_data,
+            template_data={
+                "description": type_specific_obj.description,
+                "category": type_specific_obj.category,
+                "usage_count": type_specific_obj.usage_count,
+                "target_node_id": type_specific_obj.target_node_id,
+                "create_container": type_specific_obj.create_container
+            }
+        )
+
+    elif node.node_type == "folder":
+        return FolderResponse(
+            **base_data,
+            folder_data={
+                "description": type_specific_obj.description
+            } if type_specific_obj and type_specific_obj.description else None
+        )
+
     else:
         raise ValueError(f"Unknown node type: {node.node_type}")
 
@@ -882,14 +1087,9 @@ async def preview_smart_folder_rules_new(
     preview_nodes = await rules_engine.preview_smart_folder_results(
         rules, current_user.id, limit
     )
-    
-    # Convert to response format
-    responses = []
-    for node in preview_nodes:
-        response = await convert_node_to_response(node, session)
-        responses.append(response)
-    
-    return responses
+
+    # Convert to response format using batch processing
+    return await convert_nodes_to_responses_batch(preview_nodes, session)
 
 
 @router.get("/{smart_folder_id}/contents", response_model=List[NodeResponseUnion])
@@ -919,14 +1119,9 @@ async def get_smart_folder_contents(
     
     # Apply pagination
     paginated_nodes = matching_nodes[offset:offset + limit]
-    
-    # Convert to response format
-    responses = []
-    for node in paginated_nodes:
-        response = await convert_node_to_response(node, session)
-        responses.append(response)
-    
-    return responses
+
+    # Convert to response format using batch processing
+    return await convert_nodes_to_responses_batch(paginated_nodes, session)
 
 
 @router.post("/{smart_folder_id}/preview", response_model=List[NodeResponseUnion])
@@ -949,19 +1144,18 @@ async def preview_smart_folder_rules(
     if not smart_folder:
         raise HTTPException(status_code=404, detail="Smart folder not found")
     
+    # Get effective rule data (prefer rule_id over legacy rules)
+    from app.services.smart_folder_migration import get_effective_rule_data
+    effective_rules = await get_effective_rule_data(smart_folder, session)
+
     # Preview results
     rules_engine = SmartFolderRulesEngine(session)
     preview_nodes = await rules_engine.preview_smart_folder_results(
-        smart_folder.rules, current_user.id, limit
+        effective_rules, current_user.id, limit
     )
-    
-    # Convert to response format
-    responses = []
-    for node in preview_nodes:
-        response = await convert_node_to_response(node, session)
-        responses.append(response)
-    
-    return responses
+
+    # Convert to response format using batch processing
+    return await convert_nodes_to_responses_batch(preview_nodes, session)
 
 
 @router.put("/{smart_folder_id}/rules", response_model=SmartFolderResponse)
@@ -1139,12 +1333,12 @@ async def get_template_target_node(
 @router.put("/templates/{template_id}/target-node")
 async def set_template_target_node(
     template_id: UUID,
-    request: dict,
+    request: SetTemplateTargetNodeRequest,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Set the target node ID for a template"""
-    
+
     # Get the template
     template_query = select(Template).where(
         Template.id == template_id,
@@ -1152,12 +1346,12 @@ async def set_template_target_node(
     )
     result = await session.execute(template_query)
     template = result.scalar_one_or_none()
-    
+
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    
+
     # Get target_node_id from request
-    target_node_id_str = request.get("target_node_id")
+    target_node_id_str = request.target_node_id
     
     # Validate target node exists and belongs to user if provided
     if target_node_id_str:
@@ -1212,12 +1406,12 @@ async def get_template_create_container(
 @router.put("/templates/{template_id}/create-container")
 async def set_template_create_container(
     template_id: UUID,
-    request: dict,
+    request: SetTemplateCreateContainerRequest,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Set the create_container setting for a template"""
-    
+
     # Get the template
     template_query = select(Template).where(
         Template.id == template_id,
@@ -1225,20 +1419,12 @@ async def set_template_create_container(
     )
     result = await session.execute(template_query)
     template = result.scalar_one_or_none()
-    
+
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    
-    # Get create_container from request
-    create_container = request.get("create_container")
-    
-    if create_container is None:
-        raise HTTPException(status_code=400, detail="create_container field is required")
-    
-    if not isinstance(create_container, bool):
-        raise HTTPException(status_code=400, detail="create_container must be a boolean")
-    
-    template.create_container = create_container
+
+    # Set create_container from request (validation done by Pydantic)
+    template.create_container = request.create_container
     await session.commit()
-    
-    return {"success": True, "create_container": create_container}
+
+    return {"success": True, "create_container": request.create_container}

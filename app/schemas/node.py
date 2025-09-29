@@ -117,11 +117,23 @@ class SmartFolderRules(BaseModel):
 class SmartFolderData(BaseModel):
     """Smart folder-specific data"""
     rule_id: Optional[UUID] = None  # Reference to the rule this smart folder uses
-    rules: Optional[dict] = None  # DEPRECATED - Raw dict for JSON storage, kept for backward compatibility
+    rules: Optional[dict] = Field(None, deprecated=True, description="DEPRECATED - Use rule_id instead. Raw dict for JSON storage, kept for backward compatibility only.")
     auto_refresh: Optional[bool] = None
     description: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('rules')
+    @classmethod
+    def validate_rules_deprecated(cls, v):
+        if v is not None:
+            import warnings
+            warnings.warn(
+                "The 'rules' field is deprecated. Use 'rule_id' to reference a Rule entity instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+        return v
 
 
 class SmartFolderCreate(NodeCreate):
@@ -330,6 +342,21 @@ def create_node_response(node_data: dict, task_data: dict = None, note_data: dic
         )
     else:
         raise ValueError(f"Unknown node type: {node_type}")
+
+
+# Template configuration schemas
+class SetTemplateTargetNodeRequest(BaseModel):
+    """Schema for setting template target node"""
+    target_node_id: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SetTemplateCreateContainerRequest(BaseModel):
+    """Schema for setting template create container setting"""
+    create_container: bool
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Validation helpers

@@ -8,6 +8,7 @@ from app.db.deps import get_db
 from app.api.auth import get_current_user
 from app.models.tag import Tag
 from app.models.user import User
+from app.schemas.tag import TagCreate, TagUpdate
 
 
 router = APIRouter(prefix="/tags", tags=["tags"])
@@ -47,22 +48,20 @@ async def list_tags(
 
 @router.post("", status_code=201)
 async def create_tag(
-    name: str = Query(..., description="Tag name"),
-    description: Optional[str] = Query(None, description="Tag description"),
-    color: Optional[str] = Query(None, description="Hex color code (e.g., #FF0000)"),
+    tag_data: TagCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Create a new tag or return existing one if it already exists"""
-    
+
     # Check if tag already exists
     existing_query = select(Tag).where(
         Tag.owner_id == current_user.id,
-        Tag.name == name
+        Tag.name == tag_data.name
     )
     result = await db.execute(existing_query)
     existing_tag = result.scalar_one_or_none()
-    
+
     if existing_tag:
         return {
             "id": str(existing_tag.id),
@@ -72,23 +71,19 @@ async def create_tag(
             "created_at": existing_tag.created_at.isoformat() if existing_tag.created_at else None,
             "existed": True
         }
-    
-    # Validate color format if provided
-    if color and not color.startswith('#'):
-        raise HTTPException(status_code=400, detail="Color must be a hex code starting with #")
-    
-    # Create new tag
+
+    # Create new tag (color validation already done by Pydantic)
     try:
         tag = Tag(
             owner_id=current_user.id,
-            name=name.strip(),
-            description=description.strip() if description else None,
-            color=color
+            name=tag_data.name.strip(),
+            description=tag_data.description.strip() if tag_data.description else None,
+            color=tag_data.color
         )
         db.add(tag)
         await db.commit()
         await db.refresh(tag)
-        
+
         return {
             "id": str(tag.id),
             "name": tag.name,
@@ -141,9 +136,15 @@ async def get_tag(
     current_user: User = Depends(get_current_user)
 ):
     """Get a specific tag by ID"""
-    
+
+    try:
+        from uuid import UUID
+        tag_uuid = UUID(tag_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+
     query = select(Tag).where(
-        Tag.id == tag_id,
+        Tag.id == tag_uuid,
         Tag.owner_id == current_user.id
     )
     result = await db.execute(query)
@@ -165,36 +166,40 @@ async def get_tag(
 @router.put("/{tag_id}")
 async def update_tag(
     tag_id: str,
-    name: Optional[str] = Query(None, description="New tag name"),
-    description: Optional[str] = Query(None, description="New tag description"),
-    color: Optional[str] = Query(None, description="New hex color code"),
+    tag_data: TagUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Update an existing tag. If renaming to an existing tag name, merges the tags."""
     from app.models.node_associations import node_tags
     from sqlalchemy import insert, delete as sql_delete
-    
+
+    try:
+        from uuid import UUID
+        tag_uuid = UUID(tag_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+
     # Get existing tag
     query = select(Tag).where(
-        Tag.id == tag_id,
+        Tag.id == tag_uuid,
         Tag.owner_id == current_user.id
     )
     result = await db.execute(query)
     tag = result.scalar_one_or_none()
-    
+
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
-    
+
     # Handle tag name update with potential merge
-    if name is not None and name.strip() != tag.name:
-        new_name = name.strip()
+    if tag_data.name is not None and tag_data.name.strip() != tag.name:
+        new_name = tag_data.name.strip()
         
         # Check if a tag with the new name already exists
         existing_query = select(Tag).where(
             Tag.owner_id == current_user.id,
             Tag.name == new_name,
-            Tag.id != tag_id
+            Tag.id != tag_uuid
         )
         existing_result = await db.execute(existing_query)
         existing_tag = existing_result.scalar_one_or_none()
@@ -250,14 +255,12 @@ async def update_tag(
             # No existing tag with new name, just rename
             tag.name = new_name
     
-    # Update other fields
-    if description is not None:
-        tag.description = description.strip() if description else None
-        
-    if color is not None:
-        if color and not color.startswith('#'):
-            raise HTTPException(status_code=400, detail="Color must be a hex code starting with #")
-        tag.color = color
+    # Update other fields (color validation already done by Pydantic)
+    if tag_data.description is not None:
+        tag.description = tag_data.description.strip() if tag_data.description else None
+
+    if tag_data.color is not None:
+        tag.color = tag_data.color
     
     await db.commit()
     await db.refresh(tag)
@@ -279,10 +282,16 @@ async def delete_tag(
     current_user: User = Depends(get_current_user)
 ):
     """Delete a tag and all its node associations"""
-    
+
+    try:
+        from uuid import UUID
+        tag_uuid = UUID(tag_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+
     # Get existing tag
     query = select(Tag).where(
-        Tag.id == tag_id,
+        Tag.id == tag_uuid,
         Tag.owner_id == current_user.id
     )
     result = await db.execute(query)
